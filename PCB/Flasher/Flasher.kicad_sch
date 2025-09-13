@@ -4924,6 +4924,12 @@
 		(uuid "4208e4b7-16a1-4595-a111-7a2bca84a61b")
 	)
 	(junction
+		(at 137.795 36.83)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "477480c3-eb5b-4f8f-8863-5c3f4735d4c5")
+	)
+	(junction
 		(at 74.295 82.55)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5308,10 +5314,6 @@
 	(no_connect
 		(at 267.97 68.58)
 		(uuid "78ed7c20-893f-4623-9ad9-34059b4c87ea")
-	)
-	(no_connect
-		(at 43.815 51.435)
-		(uuid "89356020-a6fd-4996-b583-81ce2f4e46b3")
 	)
 	(no_connect
 		(at 43.815 28.575)
@@ -6327,6 +6329,16 @@
 	)
 	(wire
 		(pts
+			(xy 136.525 36.83) (xy 137.795 36.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b5ba9516-a170-4f13-9f9a-4d34eff158fc")
+	)
+	(wire
+		(pts
 			(xy 210.185 109.855) (xy 210.185 123.825)
 		)
 		(stroke
@@ -7208,6 +7220,28 @@
 			)
 		)
 	)
+	(global_label "LOOP"
+		(shape input)
+		(at 43.815 51.435 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "5f6db3ff-645d-4c45-93cf-f84108e10631")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 36.5249 51.435 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "RST"
 		(shape input)
 		(at 74.295 84.455 270)
@@ -7528,6 +7562,28 @@
 		(uuid "b44d326f-e1c3-4f95-87c0-1c2a8171c97f")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 184.6463 131.445 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "LOOP"
+		(shape output)
+		(at 136.525 36.83 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d6d7b601-1d06-4a9c-863a-573842af923d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 129.2349 36.83 0)
 			(effects
 				(font
 					(size 1.27 1.27)
