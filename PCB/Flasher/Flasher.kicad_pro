@@ -59,12 +59,7 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [
-        [
-          "lib_footprint_mismatch|127217500|65000000|a7d42475-10d7-4d4e-9b9e-c7fddc840c27|00000000-0000-0000-0000-000000000000",
-          ""
-        ]
-      ],
+      "drc_exclusions": [],
       "meta": {
         "filename": "board_design_settings.json",
         "version": 2
@@ -495,7 +490,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "Faikin.kicad_pro",
+    "filename": "Flasher.kicad_pro",
     "version": 3
   },
   "net_settings": {

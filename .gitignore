@@ -17,3 +17,5 @@ dependencies.lock
 settings.c
 settings.h
 PCB/home
+PCB/*/*-backups
+PCB/*/fp-info-cache
