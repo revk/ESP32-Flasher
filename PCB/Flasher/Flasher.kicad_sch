@@ -3180,6 +3180,352 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "RevK:SW_Push_DPDT"
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "SW"
+				(at 0 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "SW_Push_DPDT"
+				(at 0 -10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "RevK:SW_Push_DPDT"
+				(at 0 5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Momentary Switch, dual pole double throw"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "MPN" "C2911139"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "switch dual-pole double-throw spdt ON-ON"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "SW_Push_DPDT_0_0"
+				(circle
+					(center -2.032 5.08)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center -2.032 -5.08)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 2.54)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 -7.62)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SW_Push_DPDT_0_1"
+				(polyline
+					(pts
+						(xy -1.524 5.334) (xy 2.3368 7.0612)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.524 -4.826) (xy 2.3368 -3.0988)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 7.874) (xy 0 6.096)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 3.556) (xy 0 4.572)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.27) (xy 0 2.286)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -1.016) (xy 0 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 -2.286) (xy 0 -4.064)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 7.62)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 2.032 -2.54)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SW_Push_DPDT_1_1"
+				(rectangle
+					(start -3.175 8.89)
+					(end 3.175 -8.89)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(pin passive line
+					(at -5.08 5.08 0)
+					(length 2.54)
+					(name "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -5.08 0)
+					(length 2.54)
+					(name "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 7.62 180)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 2.54 180)
+					(length 2.54)
+					(name "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 -2.54 180)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 -7.62 180)
+					(length 2.54)
+					(name "C"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "RevK:TF_PUSH"
 			(pin_names
 				(offset 1.016)
@@ -5649,6 +5995,10 @@
 		(uuid "110b163e-885b-4613-abc2-6bf53c13465a")
 	)
 	(no_connect
+		(at 50.8 101.6)
+		(uuid "11bad6b8-2788-4f25-b6e8-87ce36a777e9")
+	)
+	(no_connect
 		(at 43.815 61.595)
 		(uuid "1e10b5dc-61ce-43a5-99d5-fb462f086090")
 	)
@@ -5673,6 +6023,10 @@
 		(uuid "41f04b59-744d-4352-a32a-30f973baf2e5")
 	)
 	(no_connect
+		(at 60.96 101.6)
+		(uuid "52ccc8d5-b09c-4e51-9bb7-3f8680186e23")
+	)
+	(no_connect
 		(at 43.815 64.135)
 		(uuid "5c5065b6-4f5c-4217-ba9a-92c79d8641bd")
 	)
@@ -5681,12 +6035,12 @@
 		(uuid "5d90ee0a-ed7d-482c-a6e1-7d62495fe3db")
 	)
 	(no_connect
-		(at 74.295 48.895)
-		(uuid "5ed930a2-8913-48e1-8209-1e7b2b4fd47b")
-	)
-	(no_connect
 		(at 43.815 59.055)
 		(uuid "68ee0d60-9253-4b77-af20-c2f06985b67f")
+	)
+	(no_connect
+		(at 66.04 101.6)
+		(uuid "6dd2c9e8-2168-4c35-a77e-f76465331957")
 	)
 	(no_connect
 		(at 267.97 66.04)
@@ -5701,7 +6055,7 @@
 		(uuid "78ed7c20-893f-4623-9ad9-34059b4c87ea")
 	)
 	(no_connect
-		(at 43.815 56.515)
+		(at 74.295 48.895)
 		(uuid "8cc4e797-d0df-4ef2-aabb-33e634e3b541")
 	)
 	(no_connect
@@ -5711,6 +6065,10 @@
 	(no_connect
 		(at 74.295 66.675)
 		(uuid "92ca7e0a-9903-4637-ad7c-ffd819d56fff")
+	)
+	(no_connect
+		(at 63.5 111.76)
+		(uuid "9f13ab9a-2db0-45c7-b0ad-d9c9807fef38")
 	)
 	(no_connect
 		(at 74.295 56.515)
@@ -7306,6 +7664,28 @@
 			)
 		)
 	)
+	(global_label "BTN"
+		(shape input)
+		(at 43.815 56.515 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0b222857-3f24-4e7f-84db-25933f111bc8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 37.9159 56.515 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "VOUT"
 		(shape passive)
 		(at 146.05 51.435 180)
@@ -7604,6 +7984,28 @@
 		(uuid "3c45bdf7-9bd2-49d0-a010-c7a7f525cff0")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 186.1431 118.745 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "BTN"
+		(shape output)
+		(at 53.34 111.76 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "3d856e0e-b734-49a9-9ad7-b50c852e8371")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 53.34 117.6591 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9230,6 +9632,95 @@
 			(project "Faikin"
 				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
 					(reference "#PWR02")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "RevK:SW_Push_DPDT")
+		(at 58.42 106.68 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "10170dd2-9ce4-4338-a479-2071d0a834de")
+		(property "Reference" "SW1"
+			(at 45.5125 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "SW_Push_DPDT"
+			(at 47.9368 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "RevK:SW_Push_DPDT"
+			(at 53.34 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 53.34 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Momentary Switch, dual pole double throw"
+			(at 58.42 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "MPN" "C2911139"
+			(at 58.42 106.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "3"
+			(uuid "d4d59159-e1ae-47d3-85f7-8f731fe61151")
+		)
+		(pin "6"
+			(uuid "70819662-a0b4-424c-bb04-7b5dd24ac741")
+		)
+		(pin "4"
+			(uuid "7574e76e-2f5d-4922-b2e1-fe7d144b9806")
+		)
+		(pin "2"
+			(uuid "ebc09142-16cf-4846-be6a-fb3d2cee4fc6")
+		)
+		(pin "5"
+			(uuid "00274cd5-9d8b-4f7f-a66d-63b9893ee8db")
+		)
+		(pin "1"
+			(uuid "763cff13-77f2-4c4e-ac6c-fd9efc4aab86")
+		)
+		(instances
+			(project "Flasher"
+				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
+					(reference "SW1")
 					(unit 1)
 				)
 			)
@@ -12536,6 +13027,72 @@
 			(project "Flasher"
 				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
 					(reference "D7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 55.88 101.6 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "8de291eb-de07-4623-abdc-060114abe1ca")
+		(property "Reference" "#PWR032"
+			(at 55.88 95.25 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 55.88 97.4669 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 55.88 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 55.88 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 55.88 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "4b4fbc1d-1362-4e77-90be-68fa424c8ad4")
+		)
+		(instances
+			(project "Flasher"
+				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
+					(reference "#PWR032")
 					(unit 1)
 				)
 			)
