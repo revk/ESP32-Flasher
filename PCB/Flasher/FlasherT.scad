@@ -1,6 +1,6 @@
 // Generated case design for Flasher/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2025-09-14 10:59:20
+// Generated 2025-09-14 14:58:20
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -133,7 +133,7 @@ translate([7.500000,4.900000,1.600000])rotate([0,0,90.000000])m7(part,hole,block
 module J2(){translate([-28.000000,-7.500000,1.600000])rotate([0,0,-90.000000])children();}
 module part_J2(part=true,hole=false,block=false)
 {
-// Missing model J2.1 RJ12
+translate([-28.000000,-7.500000,1.600000])rotate([0,0,-90.000000])m8(part,hole,block,casetop); // J2 (back)
 };
 module R7(){translate([30.780000,-5.200000,1.600000])children();}
 module part_R7(part=true,hole=false,block=false)
@@ -201,12 +201,12 @@ translate([-14.017500,-1.025000,1.600000])rotate([0,0,-90.000000])m3(part,hole,b
 module C3(){translate([24.300000,-7.650000,1.600000])rotate([0,0,90.000000])children();}
 module part_C3(part=true,hole=false,block=false)
 {
-translate([24.300000,-7.650000,1.600000])rotate([0,0,90.000000])m8(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
+translate([24.300000,-7.650000,1.600000])rotate([0,0,90.000000])m9(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
 };
 module J5(){translate([-1.500000,5.350000,1.600000])rotate([0,0,180.000000])children();}
 module part_J5(part=true,hole=false,block=false)
 {
-translate([-1.500000,5.350000,1.600000])rotate([0,0,180.000000])m9(part,hole,block,casetop); // J5 (back)
+translate([-1.500000,5.350000,1.600000])rotate([0,0,180.000000])m10(part,hole,block,casetop); // J5 (back)
 };
 module D9(){translate([-14.017500,6.975000,1.600000])rotate([0,0,-90.000000])children();}
 module part_D9(part=true,hole=false,block=false)
@@ -251,7 +251,7 @@ translate([25.800000,-5.800000,1.600000])rotate([0,0,90.000000])m7(part,hole,blo
 module U2(){translate([26.900000,-7.500000,1.600000])rotate([0,0,90.000000])children();}
 module part_U2(part=true,hole=false,block=false)
 {
-translate([26.900000,-7.500000,1.600000])rotate([0,0,90.000000])m10(part,hole,block,casetop); // U2 (back)
+translate([26.900000,-7.500000,1.600000])rotate([0,0,90.000000])m11(part,hole,block,casetop); // U2 (back)
 };
 module R13(){translate([-1.550000,-4.100000,1.600000])rotate([0,0,90.000000])children();}
 module part_R13(part=true,hole=false,block=false)
@@ -271,7 +271,7 @@ translate([-12.742500,0.550000,1.600000])m7(part,hole,block,casetop); // RevK:C_
 module U1(){translate([16.000000,2.000000,1.600000])children();}
 module part_U1(part=true,hole=false,block=false)
 {
-translate([16.000000,2.000000,1.600000])m11(part,hole,block,casetop); // U1 (back)
+translate([16.000000,2.000000,1.600000])m12(part,hole,block,casetop); // U1 (back)
 };
 module D13(){translate([-19.000000,-5.000000,1.600000])rotate([0,0,180.000000])children();}
 module part_D13(part=true,hole=false,block=false)
@@ -286,12 +286,12 @@ translate([5.050000,-4.100000,1.600000])rotate([0,0,90.000000])m1(part,hole,bloc
 module L1(){translate([25.500000,-11.600000,1.600000])rotate([0,0,-90.000000])children();}
 module part_L1(part=true,hole=false,block=false)
 {
-translate([25.500000,-11.600000,1.600000])rotate([0,0,-90.000000])m12(part,hole,block,casetop); // L1 (back)
+translate([25.500000,-11.600000,1.600000])rotate([0,0,-90.000000])m13(part,hole,block,casetop); // L1 (back)
 };
 module U3(){translate([32.000000,-11.100000,1.600000])rotate([0,0,180.000000])children();}
 module part_U3(part=true,hole=false,block=false)
 {
-translate([32.000000,-11.100000,1.600000])rotate([0,0,180.000000])m13(part,hole,block,casetop); // U3 (back)
+translate([32.000000,-11.100000,1.600000])rotate([0,0,180.000000])m14(part,hole,block,casetop); // U3 (back)
 };
 module C12(){translate([-0.450000,-4.100000,1.600000])rotate([0,0,90.000000])children();}
 module part_C12(part=true,hole=false,block=false)
@@ -301,7 +301,7 @@ translate([-0.450000,-4.100000,1.600000])rotate([0,0,90.000000])m7(part,hole,blo
 module C2(){translate([24.900000,-3.400000,1.600000])children();}
 module part_C2(part=true,hole=false,block=false)
 {
-translate([24.900000,-3.400000,1.600000])m8(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
+translate([24.900000,-3.400000,1.600000])m9(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
 };
 module C9(){translate([25.500000,-4.950000,1.600000])children();}
 module part_C9(part=true,hole=false,block=false)
@@ -331,7 +331,7 @@ translate([24.900000,7.375000,1.600000])rotate([0,0,-90.000000])m7(part,hole,blo
 module J3(){translate([-24.330000,6.500000,1.600000])rotate([0,0,-90.000000])children();}
 module part_J3(part=true,hole=false,block=false)
 {
-// Missing model J3.1 USB_A_Molex_67643_Horizontal
+translate([-24.330000,6.500000,1.600000])rotate([0,0,-90.000000])m15(part,hole,block,casetop); // J3 (back)
 };
 // Parts to go on PCB (top)
 module parts_top(part=false,hole=false,block=false){
@@ -396,7 +396,7 @@ part_C4(part,hole,block);
 part_J3(part,hole,block);
 }
 
-parts_top=22;
+parts_top=24;
 module J1(){translate([16.000000,2.000000,0.000000])rotate([0,0,180.000000])rotate([180,0,0])children();}
 module part_J1(part=true,hole=false,block=false)
 {
@@ -482,7 +482,7 @@ if(hole)
         hull()
         {
                 b(0,0,.8,1.2,1.2,1);
-                translate([0,0,height])cylinder(d=2.001,h=1,$fn=16);
+                translate([0,0,height-1.001])cylinder(d=2.001,h=0.001,$fn=16);
         }
 }
 if(block)
@@ -490,7 +490,7 @@ if(block)
         hull()
         {
                 b(0,0,.8,2.8,2.8,1);
-                translate([0,0,height])cylinder(d=4,h=1,$fn=16);
+                translate([0,0,height-1.001])cylinder(d=4,h=1,$fn=16);
         }
 }
 }
@@ -518,17 +518,24 @@ module m6(part=false,hole=false,block=false,height)
 if(part)
 {
  b(0,0,0,5,9,1);	// Pads
- // Not part as we expect to always be a hold through case
- //b(0,0,0,5.8,5.8,5);
- //b(0,0,0,2.9,3.6,8);
 }
 if(hole)
 {
  b(0,0,0,6,6,height+1);
+ hull()
+ {
+ 	b(0,0,5,6,6,1);
+	translate([0,0,10])cylinder(d=15,h=10);
+ }
 }
 if(block)
 {
  b(0,0,0,8,8,height);
+ hull()
+ {
+ 	b(0,0,5,8,8,1);
+	translate([0,0,10])cylinder(d=17,h=10);
+ }
 }
 }
 
@@ -543,6 +550,23 @@ if(part)
 }
 
 module m8(part=false,hole=false,block=false,height)
+{ // J2
+if(part)
+{
+	b(0,0.5,0,12.2,13,1);
+	for(x=[-6,6])translate([x,0,0])cylinder(d=3,h=5);
+}
+if(hole)
+{
+	b(0,0.5,0,12.2,13,14.5);
+	b(0,-6-10,1,9.6,20,12);
+	for(x=[-6,6])translate([x,0,-3.2])cylinder(d=3,h=3.2);
+	for(x=[-2.55,-0.51,1.53])translate([x,2.3,-3.2])cylinder(d1=0.9,d2=1.5,h=3.2-pcbthickness);
+	for(x=[-1.53,0.51,2.55])translate([x,4.84,-3.2])cylinder(d1=0.9,d2=1.5,h=3.2-pcbthickness);
+}
+}
+
+module m9(part=false,hole=false,block=false,height)
 { // RevK:C_0402 C_0402_1005Metric
 // 0402 Capacitor
 if(part)
@@ -552,7 +576,7 @@ if(part)
 }
 }
 
-module m9(part=false,hole=false,block=false,height)
+module m10(part=false,hole=false,block=false,height)
 { // J5
 if(part)
 {
@@ -566,11 +590,11 @@ if(part)
 if(hole)
 {
 	b(-0.95,-4.7-5,0.75,11.5,25,1.5);	// Card
-	translate([0,-9.12-10,0])sphere(10);
+	translate([0,-8.47-10,-height])cylinder(r=10,h=height*2);
 }
 }
 
-module m10(part=false,hole=false,block=false,height)
+module m11(part=false,hole=false,block=false,height)
 { // U2
 // SOT-563
 if(part)
@@ -580,7 +604,7 @@ if(part)
 }
 }
 
-module m11(part=false,hole=false,block=false,height)
+module m12(part=false,hole=false,block=false,height)
 { // U1
 // ESP32-S3-MINI-1
 translate([-15.4/2,-15.45/2,0])
@@ -594,7 +618,7 @@ translate([-15.4/2,-15.45/2,0])
 }
 }
 
-module m12(part=false,hole=false,block=false,height)
+module m13(part=false,hole=false,block=false,height)
 { // L1
 // 5x5x4 Inductor
 if(part)
@@ -603,11 +627,27 @@ if(part)
 }
 }
 
-module m13(part=false,hole=false,block=false,height)
+module m14(part=false,hole=false,block=false,height)
 { // U3
 if(part)
 {
 	cube([4,4,1],center=true);
+}
+}
+
+module m15(part=false,hole=false,block=false,height)
+{ // J3
+if(part)
+{
+	b(0,-3.17,0,13.1,14.3,1);
+	b(0,-3.17-6.65,0,14.5,1,1);
+}
+if(hole)
+{
+	b(0,-3.17,0,13.1,14.3,8);
+	b(0,-3.17-6.65,0,14.5,1,8);
+	b(0,-3.17-6.65-10,1.5,12,20,5);
+	b(0,-3.17-6.65-12,-1,20,20,10);
 }
 }
 
