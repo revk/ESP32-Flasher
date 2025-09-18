@@ -1,6 +1,6 @@
 // Generated case design for Flasher/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2025-09-16 12:50:14
+// Generated 2025-09-18 07:20:06
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -428,15 +428,15 @@ rotate([-90,0,0])translate([-4.47,-3.84,0])
 		translate([0,1.7,0])cube([8.94,1.6,1.6301]);
 	}
 	if(hole)
-		translate([1.63,-20,1.63])
+		translate([1.63,-21.2-1,1.63])
 		rotate([-90,0,0])
 	{
 		// Plug
 		hull()
 		{
-			cylinder(d=2.5,h=21,$fn=24);
+			cylinder(d=2.5,h=24,$fn=24);
 			translate([5.68,0,0])
-			cylinder(d=2.5,h=21,$fn=24);
+			cylinder(d=2.5,h=24,$fn=24);
 		}
 		hull()
 		{
@@ -651,6 +651,8 @@ if(hole)
 	b(0,-3.17-6.65,0,14.5,1,8);
 	b(0,-3.17-6.65-10,1.5,12,20,5);
 	b(0,-3.17-6.65-12,-1,20,20,10);
+	for(x=[-6.6,6.6])translate([x,0,-3.2])cylinder(d=3,h=3.2);
+	for(x=[-3.5,-1,1,3.5])translate([x,3.01,-3.2])cylinder(d1=0.9,d2=1.5,h=3.2-pcbthickness);
 }
 }
 
@@ -774,8 +776,8 @@ module top_half(fit=0)
                 {
                 	union()
                 	{
-                		parts_top(part=true);
-                		parts_bottom(part=true);
+                		parts_top(part=true,hole=true);
+                		parts_bottom(part=true,hole=true);
                 	}
                 	translate([-0.01,-0.01,-height])cube([0.02,0.02,height]);
                 }
@@ -784,8 +786,8 @@ module top_half(fit=0)
         {
         	union()
                 {
-                	parts_top(part=true);
-                	parts_bottom(part=true);
+                	parts_top(part=true,hole=true);
+                	parts_bottom(part=true,hole=true);
                 }
                 translate([-0.01,-0.01,0])cube([0.02,0.02,height]);
         }
@@ -809,7 +811,7 @@ module top_side_hole()
 			parts_top(hole=true);
 			case_wall();
 		}
-		translate([0,0,-casebottom])pcb_hulled(height,casewall-edge);
+		translate([0,0,-casebottom])pcb_hulled(height,casewall);
 	}
 }
 
