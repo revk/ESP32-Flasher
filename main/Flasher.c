@@ -34,6 +34,7 @@ app_main()
 {
    revk_boot(&mqtt_client_callback);
    revk_start();
+   ESP_LOGE(TAG,"Started %s",topiccommand);
    while (1)
    {
       sleep(1);
