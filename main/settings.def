@@ -1,2 +1,14 @@
+gpio	sd.dat2	2	// DAT2
+gpio	sd.dat3	3	// DAT3
+gpio	sd.cmd	4	// CMD
+gpio	sd.clk	5	// CLK
+gpio	sd.dat0	6	// DAT0
+gpio	sd.dat1	7	// DAT1
+gpio	sd.cd	-8	// CD
 
+gpio	pwr.3	9	// 3.3V power
+gpio	pwr.5	10	// 5V power
+gpio	led	11	// LED
 
+gpio	loop	1	// Loop
+gpio	btn	-12	// Button

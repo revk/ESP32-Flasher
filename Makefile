@@ -73,5 +73,5 @@ update:
 
 # Program the FTDI
 ftdi: ftdizap/ftdizap
-	./ftdizap/ftdizap --serial="RevK" --description="Faikin" --cbus2-mode=17 --self-powered=1
+	./ftdizap/ftdizap --serial="Flasher" --description="Flasher" --self-powered=1
 
