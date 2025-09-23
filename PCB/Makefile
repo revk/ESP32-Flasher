@@ -1,4 +1,4 @@
-all: png stl
+all: png stl */README.md
 
 stl:    Flasher/FlasherT.stl Flasher/FlasherB.stl
 
@@ -20,3 +20,6 @@ Flasher/FlasherT.scad: Flasher/Flasher.kicad_pcb PCBCase/case
 
 %.png:	%.kicad_pcb PCBCase/clean PCBCase/render
 	PCBCase/render $<
+
+%/README.md: %/*.kicad_pcb %/*.stl PCBCase/readme
+	PCBCase/readme $@
