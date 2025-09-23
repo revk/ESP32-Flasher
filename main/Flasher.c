@@ -1,5 +1,8 @@
 // Flasher
 
+// note: https://github.com/espressif/esp-idf/blob/v5.5.1/examples/peripherals/usb/host/cdc/cdc_acm_host/main/usb_cdc_example_main.c
+// note: https://github.com/espressif/esp-serial-flasher/tree/master/src
+
 static const char TAG[] = "Flasher";
 
 #include "revk.h"
@@ -17,10 +20,12 @@ static const char TAG[] = "Flasher";
 #include "esp_vfs_fat.h"
 #include <sys/dirent.h>
 #include "usb/usb_host.h"
+#include "usb/cdc_acm_host.h"
 
 struct
 {
-   uint8_t die:1;
+   uint8_t die:1;               // Shutdown
+   uint8_t connected:1;         // Connected
 } b;
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
@@ -45,11 +50,76 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
 void
 led_task (void *arg)
 {
+   if (strip)
+   {
+      while (!b.die)
+      {
+         // TODO set of main LEDs
+         REVK_ERR_CHECK (led_strip_refresh (strip));
+         usleep (100000);
+      }
+      for (int i = 0; i < 11; i++)
+         revk_led (strip, i, 0, 0);
+      REVK_ERR_CHECK (led_strip_refresh (strip));
+   }
+   vTaskDelete (NULL);
+}
+
+void
+btn_task (void *arg)
+{
+   if (btn.set)
+   {
+      while (!b.die)
+      {
+         // TODO check button
+         usleep (100000);
+      }
+   }
+   vTaskDelete (NULL);
+}
+
+static void
+usb_lib_task (void *arg)
+{
    while (1)
    {
-      REVK_ERR_CHECK (led_strip_refresh (strip));
-      usleep (100000);
+      uint32_t event_flags;
+      usb_host_lib_handle_events (portMAX_DELAY, &event_flags);
+      if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS)
+         usb_host_device_free_all ();
    }
+}
+
+static void
+client_event (const cdc_acm_host_dev_event_data_t * event, void *user_ctx)
+{
+   switch (event->type)
+   {
+   case CDC_ACM_HOST_ERROR:
+      ESP_LOGE (TAG, "CDC-ACM error has occurred, err_no = %i", event->data.error);
+      break;
+   case CDC_ACM_HOST_DEVICE_DISCONNECTED:
+      ESP_LOGE (TAG, "Device suddenly disconnected");
+      cdc_acm_host_close (event->data.cdc_hdl);
+      b.connected = 0;
+      break;
+   case CDC_ACM_HOST_SERIAL_STATE:
+      ESP_LOGE (TAG, "Serial state notif 0x%04X", event->data.serial_state.val);
+      break;
+   case CDC_ACM_HOST_NETWORK_CONNECTION:
+   default:
+      ESP_LOGE (TAG, "Unsupported CDC event: %i", event->type);
+      break;
+   }
+}
+
+static bool
+client_rx (const uint8_t * data, size_t data_len, void *arg)
+{
+   ESP_LOGD (TAG, "Rx %d bytes", data_len);
+   printf ("%.*s", data_len, data);
+   return true;
 }
 
 //--------------------------------------------------------------------------------
@@ -57,30 +127,33 @@ led_task (void *arg)
 void
 app_main ()
 {
+   esp_err_t e = 0;
    ESP_LOGE (TAG, "Started");
    revk_boot (&mqtt_client_callback);
    revk_start ();
    revk_gpio_output (pwr3, 0);
    revk_gpio_output (pwr5, 0);
-   // LED
-   led_strip_config_t strip_config = {
-      .strip_gpio_num = led.num,
-      .max_leds = 11,
-      .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
-      .led_model = LED_MODEL_WS2812,    // LED strip model
-      .flags.invert_out = led.invert,
-   };
-   led_strip_rmt_config_t rmt_config = {
-      .clk_src = RMT_CLK_SRC_DEFAULT,   // different clock source can lead to different power consumption
-      .resolution_hz = 10 * 1000 * 1000,        // 10 MHz
-   };
+   {                            // LED
+      led_strip_config_t strip_config = {
+         .strip_gpio_num = led.num,
+         .max_leds = 11,
+         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
+         .led_model = LED_MODEL_WS2812, // LED strip model
+         .flags.invert_out = led.invert,
+      };
+      led_strip_rmt_config_t rmt_config = {
+         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
+         .resolution_hz = 10 * 1000 * 1000,     // 10 MHz
+      };
 #ifdef	CONFIG_IDF_TARGET_ESP32S3
-   rmt_config.flags.with_dma = true;
+      rmt_config.flags.with_dma = true;
 #endif
-   REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
-   revk_led (strip, 10, 255, revk_rgb ('B'));
-   revk_task ("led", led_task, NULL, 4);
-   // TODO button task
+      REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
+      revk_led (strip, 10, 255, revk_rgb ('B'));
+      revk_task ("led", led_task, NULL, 4);
+   }
+   revk_gpio_input (btn);
+   revk_task ("btn", btn_task, NULL, 4);
    // SD card set up
    revk_gpio_input (sdcd);
    sdmmc_card_t *card = NULL;
@@ -97,15 +170,34 @@ app_main ()
       slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;    // Old boards?
    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
    host.slot = SDMMC_HOST_SLOT_1;
+   {                            // USB init
+      const usb_host_config_t host_config = {
+         .skip_phy_setup = false,
+         .intr_flags = ESP_INTR_FLAG_LEVEL1,
+      };
+      e = usb_host_install (&host_config);
+      if (!e)
+         e = cdc_acm_host_install (NULL);
+      if (e)
+      {
+         revk_led (strip, 10, 255, revk_rgb ('R'));
+         ESP_LOGE (TAG, "USB init failed %s", esp_err_to_name (e));
+         jo_t j = jo_object_alloc ();
+         jo_string (j, "error", esp_err_to_name (e));
+         jo_int (j, "code", e);
+         revk_error ("USB", &j);
+      }
+   }
+   revk_task ("usb-lib", usb_lib_task, NULL, 4);
    // Main loop
    while (!b.die)
    {
       revk_led (strip, 10, 255, revk_rgb ('Y'));
-      ESP_LOGE (TAG, "Waiting SD");
+      ESP_LOGI (TAG, "Waiting SD");
       // Wait for SD card
       while (!revk_gpio_get (sdcd))
          usleep (100000);
-      ESP_LOGE (TAG, "Mounting SD");
+      ESP_LOGI (TAG, "Mounting SD");
       // Mount SD card
       esp_vfs_fat_sdmmc_mount_config_t mount_config = {
          .format_if_mount_failed = 1,
@@ -113,7 +205,7 @@ app_main ()
          .allocation_unit_size = 16 * 1024,
          .disk_status_check_enable = 1,
       };
-      esp_err_t e = esp_vfs_fat_sdmmc_mount (sd_dir, &host, &slot, &mount_config, &card);
+      e = esp_vfs_fat_sdmmc_mount (sd_dir, &host, &slot, &mount_config, &card);
       if (e != ESP_OK)
       {
          revk_led (strip, 10, 255, revk_rgb ('R'));
@@ -129,66 +221,46 @@ app_main ()
             usleep (100000);
          continue;
       }
-      ESP_LOGE (TAG, "Mounted SD");
+      ESP_LOGI (TAG, "Mounted SD");
       revk_led (strip, 10, 255, revk_rgb ('G'));
 
-      usb_host_config_t host_config = {
-         .skip_phy_setup = false,
-         .intr_flags = ESP_INTR_FLAG_LEVEL1,
-         //.peripheral_map = BIT0,
-      };
-      e = usb_host_install (&host_config);
-      if (e)
-      {
-         revk_led (strip, 10, 255, revk_rgb ('R'));
-         ESP_LOGE (TAG, "USB init failed %s", esp_err_to_name (e));
-         jo_t j = jo_object_alloc ();
-         jo_string (j, "error", esp_err_to_name (e));
-         jo_int (j, "code", e);
-         revk_error ("USB", &j);
-         while (revk_gpio_get (sdcd))
-            usleep (100000);
-         continue;
-      }
       revk_gpio_output (pwr5, 1);       // device on
-      while (revk_gpio_get (sdcd))
+      usb_host_lib_set_root_port_power (true);
+      const cdc_acm_host_device_config_t dev_config = {
+         .connection_timeout_ms = 1000,
+         .out_buffer_size = 512,
+         .in_buffer_size = 512,
+         .user_arg = NULL,
+         .event_cb = client_event,
+         .data_cb = client_rx,
+      };
+      while (revk_gpio_get (sdcd) && !b.die)
       {
-         // Wait for device
-
-         // TODO this is dummy for now.
-         bool has_clients = true;
-         bool has_devices = false;
-         while (has_clients && revk_gpio_get (sdcd))
+         cdc_acm_dev_hdl_t cdc_dev = NULL;
+         b.connected = 1;
+         e = cdc_acm_host_open (0x303A, 0x1001, 0, &dev_config, &cdc_dev);
+         if (e)
          {
-            uint32_t event_flags;
-            usb_host_lib_handle_events (portMAX_DELAY, &event_flags);
-            if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS)
-            {
-               ESP_LOGE (TAG, "Get FLAGS_NO_CLIENTS");
-               if (ESP_OK == usb_host_device_free_all ())
-               {
-                  ESP_LOGE (TAG, "All devices marked as free, no need to wait FLAGS_ALL_FREE event");
-                  has_clients = false;
-               } else
-               {
-                  ESP_LOGE (TAG, "Wait for the FLAGS_ALL_FREE");
-                  has_devices = true;
-               }
-            }
-            if (has_devices && event_flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE)
-            {
-               ESP_LOGE (TAG, "Get FLAGS_ALL_FREE");
-               has_clients = false;
-            }
+            b.connected = 0;
+            usleep (100000);
+            continue;
          }
-         ESP_LOGE (TAG, "No more clients and devices, uninstall USB Host library");
+         ESP_LOGE (TAG, "USB Connect");
+         //cdc_acm_host_desc_print (cdc_dev);
+         cdc_acm_line_coding_t line_coding;
+         cdc_acm_host_line_coding_get (cdc_dev, &line_coding);
+         ESP_LOGE (TAG, "Line Get: Rate: %" PRIu32 ", Stop bits: %" PRIu8 ", Parity: %" PRIu8 ", Databits: %" PRIu8 "",
+                   line_coding.dwDTERate, line_coding.bCharFormat, line_coding.bParityType, line_coding.bDataBits);
 
-
+         while (revk_gpio_get (sdcd) && !b.die && b.connected)
+            usleep (100000);
+         ESP_LOGE (TAG, "USB Disconnect");
          sleep (1);
       }
+      usb_host_lib_set_root_port_power (false);
       revk_gpio_output (pwr5, 0);
-      usb_host_uninstall ();
-      ESP_LOGE (TAG, "Dismounting SD");
+      ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
    }
+   usb_host_uninstall ();
 }
