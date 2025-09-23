@@ -25,7 +25,9 @@ There is a 6 pin RJ12 connector which is primarilly intended to be used with a t
 |5|GND|GND|
 |6|Loop|Boot|
 
-Note *loop* is a connection between contacts 2 and 6 to allow a target device to use this for a loop back ATE test. For serial this is slightly non standard as tag-connect has DTR on 2 and RTS on 6. For such usage the *boot* would be connected to GPIO0 allowing power control of the 3.3V to reset the device rather than using a RST connection.
+Note *loop* is a connection between contacts 2 and 6 to allow a target device to use this for a loop back ATE test. These are not used for USB.
+
+For serial this is slightly non standard as tag-connect has `DTR` on 2 and `RTS` on 6, but these are looped and used for *boot* (i.e. `DTR`). For such usage the *boot* would be connected to GPIO0 allowing power control of the 3.3V to reset the device rather than using a `RTS` connection. If `RTS` is connected on the device it may be necessary to disconnect pin 6 to avoid holding a device in reset after power on with `*boot* low for programming.
 
 Note also that the board is desigend to provide 5V (USB incoming pass through) or 3.3V to the power output so it can be used with devices needing either voltage.
 
