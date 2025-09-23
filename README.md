@@ -2,7 +2,11 @@
 
 <img src='PCB/Flasher/Flasher.png' align=right width=33%>
 
-The Flasher board is designed to allow simple flashing of code on to an ESP device, and run the code, and confirm self test results on LEDs. The main use case is a factory functional test with feedback of pass/fail via LEDs.
+The Flasher board is designed to allow simple flashing of code on to an ESP device, and run the code, and confirm self test results on LEDs.
+
+The main use case is a factory functional test with feedback of pass/fail via LEDs.
+
+The idea is a factory worker can simply plug the lead in to a target device, see a row of LEDs light one by one, then all go green (or red if failed). This simple operation should be foolproof!
 
 ## Connections
 
@@ -83,3 +87,19 @@ Or a set of files...
 4. `*.bin` (one file that is not one of the above) application to flash at `ota_0` location from partition table
 
 If we do multiple choice flashing based on button, then a sub-directory called `0` to `9` would be used for the selected image, containing files as above. It may also be that `imageN.bin` is accepted as a simpler way.
+
+## Target code
+
+Target code should output a line of text on the serial consule within five seconds of starting that is either... 
+
+`ATE: PASS`
+
+or
+
+`ATE: FAIL`
+
+A failure to send either will indicate fail.
+
+I may allow more options, perhaps number of LEDs to indicate type of failure.
+
+This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) the logs have colour codes.
