@@ -1,7 +1,5 @@
 // Flasher
-
-// note: https://github.com/espressif/esp-idf/blob/v5.5.1/examples/peripherals/usb/host/cdc/cdc_acm_host/main/usb_cdc_example_main.c
-// note: https://github.com/espressif/esp-serial-flasher/tree/master/src
+// See https://components.espressif.com/components/espressif/esp-serial-flasher/versions/1.3.1/examples/esp32_usb_cdc_acm_example?language=en
 
 static const char TAG[] = "Flasher";
 
@@ -21,12 +19,18 @@ static const char TAG[] = "Flasher";
 #include <sys/dirent.h>
 #include "usb/usb_host.h"
 #include "usb/cdc_acm_host.h"
+#include "esp_loader.h"
 
 struct
 {
    uint8_t die:1;               // Shutdown
    uint8_t connected:1;         // Connected
-} b;
+   uint8_t starts:2;            // Client starts count (to spot unstable/rebooting)
+   uint8_t downloader:1;        // Client is waiting for download.
+   uint8_t empty:1;             // Client shows traffic suggesting not flashed
+   uint8_t atefail:1;           // Client shows ATE PASS
+   uint8_t atepass:1;           // Client shows ATE PASS
+} volatile b;
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
@@ -118,7 +122,24 @@ static bool
 client_rx (const uint8_t * data, size_t data_len, void *arg)
 {
    ESP_LOGD (TAG, "Rx %d bytes", data_len);
-   printf ("%.*s", data_len, data);
+   //printf ("{%.*s}", data_len, data);
+   // We look for specific patterns
+   static char buf[30];
+   while (data_len--)
+   {
+      memmove (buf, buf + 1, sizeof (buf) - 1);
+      buf[sizeof (buf) - 1] = *data++;
+      if (!memcmp (buf, "invalid header: 0xffffffff\r\n", 28))
+         b.empty = 1;
+      if (!memcmp (buf, "Waiting for download\r\n", 22))
+         b.downloader = 1;
+      if (!memcmp (buf, "\nATE: PASS\n", 11))
+         b.atepass = 1;
+      if (!memcmp (buf, "\nATE: FAIL\n", 11))
+         b.atefail = 1;
+      if (!memcmp (buf, "ESP-ROM:", 8) && b.starts < 3)
+         b.starts++;
+   }
    return true;
 }
 
@@ -170,6 +191,11 @@ app_main ()
       slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;    // Old boards?
    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
    host.slot = SDMMC_HOST_SLOT_1;
+   if (serial3v3)
+   {
+      // TODO
+      ESP_LOGE (TAG, "Serial 3v3 is not done yet");
+   } else
    {                            // USB init
       const usb_host_config_t host_config = {
          .skip_phy_setup = false,
@@ -224,41 +250,69 @@ app_main ()
       ESP_LOGI (TAG, "Mounted SD");
       revk_led (strip, 10, 255, revk_rgb ('G'));
 
-      revk_gpio_output (pwr5, 1);       // device on
-      usb_host_lib_set_root_port_power (true);
-      const cdc_acm_host_device_config_t dev_config = {
-         .connection_timeout_ms = 1000,
-         .out_buffer_size = 512,
-         .in_buffer_size = 512,
-         .user_arg = NULL,
-         .event_cb = client_event,
-         .data_cb = client_rx,
-      };
-      while (revk_gpio_get (sdcd) && !b.die)
+      if (serial3v3)
       {
-         cdc_acm_dev_hdl_t cdc_dev = NULL;
-         b.connected = 1;
-         e = cdc_acm_host_open (0x303A, 0x1001, 0, &dev_config, &cdc_dev);
-         if (e)
+         // TODO
+      } else
+      {
+         revk_gpio_output (pwr5, 1);    // device on
+         usb_host_lib_set_root_port_power (true);
+         const cdc_acm_host_device_config_t dev_config = {
+            .connection_timeout_ms = 1000,
+            .out_buffer_size = 512,
+            .in_buffer_size = 512,
+            .user_arg = NULL,
+            .event_cb = client_event,
+            .data_cb = client_rx,
+         };
+         while (revk_gpio_get (sdcd) && !b.die)
          {
-            b.connected = 0;
-            usleep (100000);
-            continue;
-         }
-         ESP_LOGE (TAG, "USB Connect");
-         //cdc_acm_host_desc_print (cdc_dev);
-         cdc_acm_line_coding_t line_coding;
-         cdc_acm_host_line_coding_get (cdc_dev, &line_coding);
-         ESP_LOGE (TAG, "Line Get: Rate: %" PRIu32 ", Stop bits: %" PRIu8 ", Parity: %" PRIu8 ", Databits: %" PRIu8 "",
-                   line_coding.dwDTERate, line_coding.bCharFormat, line_coding.bParityType, line_coding.bDataBits);
+            cdc_acm_dev_hdl_t cdc_dev = NULL;
+            b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
+            b.connected = 1;
+            e = cdc_acm_host_open (0, 0, 0, &dev_config, &cdc_dev);
+            if (e)
+            {
+               b.connected = 0;
+               usleep (100000);
+               continue;
+            }
+            ESP_LOGE (TAG, "USB Connect");
+            int count = 50;     // 5s
+            while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
+                   && !b.atefail && count--)
+               usleep (100000);
+            if (!b.connected)
+               ESP_LOGE (TAG, "Disconnected");
+            else if (b.downloader)
+               ESP_LOGE (TAG, "Unexpected download state");
+            else if (b.empty)
+               ESP_LOGE (TAG, "Empty ready to flash");
+            else if (b.starts == 3)
+               ESP_LOGE (TAG, "Looping");
+            else if (b.atepass)
+               ESP_LOGE (TAG, "ATE PASS");
+            else if (b.atefail)
+               ESP_LOGE (TAG, "ATE FAIL");
+            else
+               ESP_LOGE (TAG, "Timeout");
 
-         while (revk_gpio_get (sdcd) && !b.die && b.connected)
-            usleep (100000);
-         ESP_LOGE (TAG, "USB Disconnect");
-         sleep (1);
+            if (b.connected && (b.empty || b.starts == 3 || b.atefail))
+            {                   // Flashing
+
+            }
+
+            if (b.connected)
+            {
+               ESP_LOGE (TAG, "Wait try again");
+               while (b.connected)
+                  usleep (100000);
+            }
+            sleep (1);
+         }
+         usb_host_lib_set_root_port_power (false);
+         revk_gpio_output (pwr5, 0);
       }
-      usb_host_lib_set_root_port_power (false);
-      revk_gpio_output (pwr5, 0);
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
    }

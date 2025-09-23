@@ -90,6 +90,8 @@ Or a set of files...
 
 If we do multiple choice flashing based on button, then a sub-directory called `0` to `9` would be used for the selected image, containing files as above. It may also be that `imageN.bin` is accepted as a simpler way.
 
+TODO: Would be smart to have a URL for files, as a file, in the directory, so they can be checked for an update automatically. Maybe even some sort of manifest.
+
 ## Target code
 
 Target code should output a line of text on the serial consule within five seconds of starting that is either... 
