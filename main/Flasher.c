@@ -1,5 +1,6 @@
 // Flasher
-static __attribute__((unused)) const char      TAG[] = "Flasher";
+static __attribute__((unused))
+     const char TAG[] = "Flasher";
 
 #include "revk.h"
 #include "esp_sleep.h"
@@ -21,24 +22,25 @@ static __attribute__((unused)) const char      TAG[] = "Flasher";
 #include <halib.h>
 
 
-const char *
-mqtt_client_callback (int client, const char *prefix, const char *target, const char *suffix, jo_t j)
+     const char *mqtt_client_callback (int client, const char *prefix, const char *target, const char *suffix, jo_t j)
 {
-	return NULL;
+   if (client || !prefix || target || strcmp (prefix, topiccommand) || !suffix)
+      return NULL;              // Not for us or not a command from main MQTTS
+
+   return NULL;
 }
 
 //--------------------------------------------------------------------------------
 // Main
 void
-app_main()
+app_main ()
 {
-   revk_boot(&mqtt_client_callback);
-   revk_start();
-   revk_gpio_output(pwr3,0);
-   revk_gpio_output(pwr5,1);
-   ESP_LOGE(TAG,"Started %s",topiccommand);
+   revk_boot (&mqtt_client_callback);
+   revk_start ();
+   revk_gpio_output (pwr3, 0);
+   revk_gpio_output (pwr5, 1);
    while (1)
    {
-      sleep(1);
+      sleep (1);
    }
 }
