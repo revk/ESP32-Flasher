@@ -34,6 +34,8 @@ app_main()
 {
    revk_boot(&mqtt_client_callback);
    revk_start();
+   revk_gpio_output(pwr3,0);
+   revk_gpio_output(pwr5,1);
    ESP_LOGE(TAG,"Started %s",topiccommand);
    while (1)
    {
