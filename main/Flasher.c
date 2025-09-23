@@ -277,29 +277,46 @@ app_main ()
                usleep (100000);
                continue;
             }
+            void reportstate (void)
+            {
+               if (!b.connected)
+                  ESP_LOGE (TAG, "Disconnected");
+               else if (b.downloader)
+                  ESP_LOGE (TAG, "Ready for download");
+               else if (b.empty)
+                  ESP_LOGE (TAG, "Empty ready to flash");
+               else if (b.starts == 3)
+                  ESP_LOGE (TAG, "Looping");
+               else if (b.atepass)
+                  ESP_LOGE (TAG, "ATE PASS");
+               else if (b.atefail)
+                  ESP_LOGE (TAG, "ATE FAIL");
+               else
+                  ESP_LOGE (TAG, "Timeout");
+            }
             ESP_LOGE (TAG, "USB Connect");
             int count = 50;     // 5s
             while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
                    && !b.atefail && count--)
                usleep (100000);
-            if (!b.connected)
-               ESP_LOGE (TAG, "Disconnected");
-            else if (b.downloader)
-               ESP_LOGE (TAG, "Unexpected download state");
-            else if (b.empty)
-               ESP_LOGE (TAG, "Empty ready to flash");
-            else if (b.starts == 3)
-               ESP_LOGE (TAG, "Looping");
-            else if (b.atepass)
-               ESP_LOGE (TAG, "ATE PASS");
-            else if (b.atefail)
-               ESP_LOGE (TAG, "ATE FAIL");
-            else
-               ESP_LOGE (TAG, "Timeout");
+            reportstate ();
 
             if (b.connected && (b.empty || b.starts == 3 || b.atefail))
             {                   // Flashing
+               ESP_LOGE (TAG, "Restart for download");
+               cdc_acm_host_set_control_line_state (cdc_dev, true, true); // TODO
+               usleep (100000);
+               b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
+               cdc_acm_host_set_control_line_state (cdc_dev, true, false); // TODO
+               count = 50;
+               while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
+                      && !b.atefail && count--)
+                  usleep (100000);
+               reportstate ();
+               if (b.downloader)
+               {                // ready to download
 
+               }
             }
 
             if (b.connected)
