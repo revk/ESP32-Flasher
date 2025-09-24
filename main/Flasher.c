@@ -24,6 +24,7 @@ static const char TAG[] = "Flasher";
 struct
 {
    uint8_t die:1;               // Shutdown
+   uint8_t wifi:1;              // WiFi connected
    uint8_t connected:1;         // Connected
    uint8_t starts:2;            // Client starts count (to spot unstable/rebooting)
    uint8_t downloader:1;        // Client is waiting for download.
@@ -31,6 +32,9 @@ struct
    uint8_t atefail:1;           // Client shows ATE PASS
    uint8_t atepass:1;           // Client shows ATE PASS
 } volatile b;
+uint8_t progress = 0;           // Progress (LED)
+char ledf = 'K',
+   ledt = 'K';                  // LED from/to
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
@@ -45,9 +49,8 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
 {
    if (client || !prefix || target || strcmp (prefix, topiccommand) || !suffix)
       return NULL;              // Not for us or not a command from main MQTTS
-
-   // TODO connect wifi, kick off upgrade check
-
+   if (!strcmp (suffix, "wifi"))
+      b.wifi = 1;
    return NULL;
 }
 
@@ -58,7 +61,20 @@ led_task (void *arg)
    {
       while (!b.die)
       {
-         // TODO set of main LEDs
+         uint32_t f = revk_rgb (ledf);
+         uint32_t t = revk_rgb (ledt);
+         uint8_t p = progress;
+         for (int i = 0; i < 10; i++)
+         {
+            uint8_t l = p;
+            if (l > 10)
+               l = 10;
+            p -= l;
+            led_strip_set_pixel (strip, i,      //
+                                 gamma8[l * ((t >> 16) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255],     //
+                                 gamma8[l * ((t >> 8) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255],      //
+                                 gamma8[l * ((t >> 0) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255]);
+         }
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
       }
@@ -135,7 +151,7 @@ client_rx (const uint8_t * data, size_t data_len, void *arg)
             b.empty = 1;
          if (!memcmp (buf, "waiting for download", 20))
             b.downloader = 1;
-         if (!memcmp (buf, "(DOWNLOAD(USB/UART0))",20))
+         if (!memcmp (buf, "(DOWNLOAD(USB/UART0))", 20))
             b.downloader = 1;
          if (!memcmp (buf, "\nATE: PASS\n", 11))
             b.atepass = 1;
@@ -261,22 +277,25 @@ app_main ()
       cdc_acm_dev_hdl_t cdc_dev = NULL; // USB device
       void do_reset (int dl)
       {
-         ESP_LOGE (TAG, "Reset%s", dl ? " (download)" : "");
-         if (serial3v3)
+         if (dl >= 0)
          {
-            // TODO
-         } else
-         {
-            // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
-            b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
-            cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
-            if (dl)
+            ESP_LOGE (TAG, "Reset%s", dl ? " (download)" : "");
+            if (serial3v3)
             {
-               cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
-               cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
+               // TODO
+            } else
+            {
+               // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
+               b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
+               if (dl)
+               {
+                  cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
+                  cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
+               }
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
             }
-            cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
-            cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
          }
          int count = 50;
          while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
@@ -300,12 +319,14 @@ app_main ()
 
       while (revk_gpio_get (sdcd) && !b.die)
       {
-         // TODO Check OTA happening
+         // TODO Check OTA happening as part of waiting for device
+         // TODO check wifi connect and upgrade check while waiting for device
          if (serial3v3)
          {
             // TODO
          } else
          {
+            // TODO device callback so we can wait for it?
             revk_gpio_output (pwr5, 1); // device on
             usb_host_lib_set_root_port_power (true);
             const cdc_acm_host_device_config_t dev_config = {
@@ -326,34 +347,35 @@ app_main ()
                continue;
             }
             ESP_LOGE (TAG, "USB Connect");
-            // TODO flashalways, etc
-            do_reset (0);
-
-            if (b.connected && (b.empty || b.starts == 3 || b.atefail))
-            {                   // Flashing
-               do_reset (1);
-               if (b.downloader)
-               {                // ready to download
-                  ESP_LOGE (TAG, "TODO Download");
-                  sleep (10);
-               }
-            }
-
-            do_reset (0);
-
-            if (b.connected)
-            {
-               ESP_LOGE (TAG, "Wait try again");
-               while (b.connected)
-                  usleep (100000);
-            }
-            ESP_LOGE (TAG, "Power off");
-            usb_host_lib_set_root_port_power (false);
-            revk_gpio_output (pwr5, 0);
          }
+         // TODO flashalways, etc
+         do_reset (-1);         // Check status
+
+         if (b.connected && (b.empty || b.starts == 3 || b.atefail))
+         {                      // Flashing
+            do_reset (1);       // Download mode
+            if (b.downloader)
+            {                   // ready to download
+               ESP_LOGE (TAG, "TODO Download");
+               sleep (10);
+               do_reset (0);    // Check normal working now
+            }
+         }
+
+         if (b.connected)
+         {
+            ESP_LOGE (TAG, "Wait try again");
+            while (b.connected)
+               usleep (100000);
+         }
+         ESP_LOGE (TAG, "Power off");
+         if (!serial3v3 && b.connected)
+            usb_host_lib_set_root_port_power (false);
+         revk_gpio_output (pwr5, 0);
       }
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
    }
+
    usb_host_uninstall ();
 }
