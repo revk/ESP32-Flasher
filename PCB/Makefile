@@ -16,7 +16,7 @@ PCBCase/clean: PCBCase/clean.c
 	echo "Made $@"
 
 Flasher/FlasherT.scad: Flasher/Flasher.kicad_pcb PCBCase/case
-	PCBCase/case -o $@ $< --edge=2 --bottom=3 --top=8 --pcb=2 --two-file
+	PCBCase/case -o $@ $< --edge=2 --bottom=3 --top=10 --pcb=2 --two-file
 
 %.png:	%.kicad_pcb PCBCase/clean PCBCase/render
 	PCBCase/render $<
