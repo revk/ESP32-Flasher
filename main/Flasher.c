@@ -124,6 +124,8 @@ client_rx (const uint8_t * data, size_t data_len, void *arg)
    ESP_LOGD (TAG, "Rx %d bytes", data_len);
    //printf ("{%.*s}", data_len, data);
    // We look for specific patterns
+      // TODO how to handle overrun rx at reset?
+   // TODO redo as a state not bit flags?
    static char buf[30];
    while (data_len--)
    {
@@ -131,7 +133,7 @@ client_rx (const uint8_t * data, size_t data_len, void *arg)
       buf[sizeof (buf) - 1] = *data++;
       if (!memcmp (buf, "invalid header: 0xffffffff\r\n", 28))
          b.empty = 1;
-      if (!memcmp (buf, "Waiting for download\r\n", 22))
+      if (!memcmp (buf, "waiting for download\r\n", 22))
          b.downloader = 1;
       if (!memcmp (buf, "\nATE: PASS\n", 11))
          b.atepass = 1;
@@ -250,6 +252,9 @@ app_main ()
       ESP_LOGI (TAG, "Mounted SD");
       revk_led (strip, 10, 255, revk_rgb ('G'));
 
+      // TODO function for normal
+      // TODO function for download
+
       if (serial3v3)
       {
          // TODO
@@ -277,6 +282,7 @@ app_main ()
                usleep (100000);
                continue;
             }
+
             void reportstate (void)
             {
                if (!b.connected)
@@ -304,10 +310,13 @@ app_main ()
             if (b.connected && (b.empty || b.starts == 3 || b.atefail))
             {                   // Flashing
                ESP_LOGE (TAG, "Restart for download");
-               cdc_acm_host_set_control_line_state (cdc_dev, true, true); // TODO
-               usleep (100000);
+               // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
+               cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
+               cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
+               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
                b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
-               cdc_acm_host_set_control_line_state (cdc_dev, true, false); // TODO
                count = 50;
                while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
                       && !b.atefail && count--)
