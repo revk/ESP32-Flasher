@@ -122,23 +122,26 @@ static bool
 client_rx (const uint8_t * data, size_t data_len, void *arg)
 {
    ESP_LOGD (TAG, "Rx %d bytes", data_len);
-   //printf ("{%.*s}", data_len, data);
+   //if (!b.empty) printf ("{%.*s}", data_len, data);
    // We look for specific patterns
-      // TODO how to handle overrun rx at reset?
-   // TODO redo as a state not bit flags?
    static char buf[30];
    while (data_len--)
    {
       memmove (buf, buf + 1, sizeof (buf) - 1);
       buf[sizeof (buf) - 1] = *data++;
-      if (!memcmp (buf, "invalid header: 0xffffffff\r\n", 28))
-         b.empty = 1;
-      if (!memcmp (buf, "waiting for download\r\n", 22))
-         b.downloader = 1;
-      if (!memcmp (buf, "\nATE: PASS\n", 11))
-         b.atepass = 1;
-      if (!memcmp (buf, "\nATE: FAIL\n", 11))
-         b.atefail = 1;
+      if (b.starts)
+      {
+         if (!memcmp (buf, "invalid header: 0xffffffff\r\n", 28))
+            b.empty = 1;
+         if (!memcmp (buf, "waiting for download", 20))
+            b.downloader = 1;
+         if (!memcmp (buf, "(DOWNLOAD(USB/UART0))",20))
+            b.downloader = 1;
+         if (!memcmp (buf, "\nATE: PASS\n", 11))
+            b.atepass = 1;
+         if (!memcmp (buf, "\nATE: FAIL\n", 11))
+            b.atefail = 1;
+      }
       if (!memcmp (buf, "ESP-ROM:", 8) && b.starts < 3)
          b.starts++;
    }
@@ -255,24 +258,64 @@ app_main ()
       // TODO function for normal
       // TODO function for download
 
-      if (serial3v3)
+      cdc_acm_dev_hdl_t cdc_dev = NULL; // USB device
+      void do_reset (int dl)
       {
-         // TODO
-      } else
-      {
-         revk_gpio_output (pwr5, 1);    // device on
-         usb_host_lib_set_root_port_power (true);
-         const cdc_acm_host_device_config_t dev_config = {
-            .connection_timeout_ms = 1000,
-            .out_buffer_size = 512,
-            .in_buffer_size = 512,
-            .user_arg = NULL,
-            .event_cb = client_event,
-            .data_cb = client_rx,
-         };
-         while (revk_gpio_get (sdcd) && !b.die)
+         ESP_LOGE (TAG, "Reset%s", dl ? " (download)" : "");
+         if (serial3v3)
          {
-            cdc_acm_dev_hdl_t cdc_dev = NULL;
+            // TODO
+         } else
+         {
+            // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
+            b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
+            cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
+            if (dl)
+            {
+               cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
+               cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
+            }
+            cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
+            cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
+         }
+         int count = 50;
+         while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
+                && !b.atefail && count--)
+            usleep (100000);
+         if (!b.connected)
+            ESP_LOGE (TAG, "Disconnected");
+         else if (b.downloader)
+            ESP_LOGE (TAG, "Ready for download");
+         else if (b.empty)
+            ESP_LOGE (TAG, "Empty ready to flash");
+         else if (b.starts == 3)
+            ESP_LOGE (TAG, "Looping");
+         else if (b.atepass)
+            ESP_LOGE (TAG, "ATE PASS");
+         else if (b.atefail)
+            ESP_LOGE (TAG, "ATE FAIL");
+         else
+            ESP_LOGE (TAG, "Timeout");
+      }
+
+      while (revk_gpio_get (sdcd) && !b.die)
+      {
+         // TODO Check OTA happening
+         if (serial3v3)
+         {
+            // TODO
+         } else
+         {
+            revk_gpio_output (pwr5, 1); // device on
+            usb_host_lib_set_root_port_power (true);
+            const cdc_acm_host_device_config_t dev_config = {
+               .connection_timeout_ms = 1000,
+               .out_buffer_size = 512,
+               .in_buffer_size = 512,
+               .user_arg = NULL,
+               .event_cb = client_event,
+               .data_cb = client_rx,
+            };
             b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
             b.connected = 1;
             e = cdc_acm_host_open (0, 0, 0, &dev_config, &cdc_dev);
@@ -282,51 +325,21 @@ app_main ()
                usleep (100000);
                continue;
             }
-
-            void reportstate (void)
-            {
-               if (!b.connected)
-                  ESP_LOGE (TAG, "Disconnected");
-               else if (b.downloader)
-                  ESP_LOGE (TAG, "Ready for download");
-               else if (b.empty)
-                  ESP_LOGE (TAG, "Empty ready to flash");
-               else if (b.starts == 3)
-                  ESP_LOGE (TAG, "Looping");
-               else if (b.atepass)
-                  ESP_LOGE (TAG, "ATE PASS");
-               else if (b.atefail)
-                  ESP_LOGE (TAG, "ATE FAIL");
-               else
-                  ESP_LOGE (TAG, "Timeout");
-            }
             ESP_LOGE (TAG, "USB Connect");
-            int count = 50;     // 5s
-            while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
-                   && !b.atefail && count--)
-               usleep (100000);
-            reportstate ();
+            // TODO flashalways, etc
+            do_reset (0);
 
             if (b.connected && (b.empty || b.starts == 3 || b.atefail))
             {                   // Flashing
-               ESP_LOGE (TAG, "Restart for download");
-               // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
-               cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
-               cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
-               b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
-               count = 50;
-               while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
-                      && !b.atefail && count--)
-                  usleep (100000);
-               reportstate ();
+               do_reset (1);
                if (b.downloader)
                {                // ready to download
-
+                  ESP_LOGE (TAG, "TODO Download");
+                  sleep (10);
                }
             }
+
+            do_reset (0);
 
             if (b.connected)
             {
@@ -334,10 +347,10 @@ app_main ()
                while (b.connected)
                   usleep (100000);
             }
-            sleep (1);
+            ESP_LOGE (TAG, "Power off");
+            usb_host_lib_set_root_port_power (false);
+            revk_gpio_output (pwr5, 0);
          }
-         usb_host_lib_set_root_port_power (false);
-         revk_gpio_output (pwr5, 0);
       }
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
