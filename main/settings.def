@@ -13,7 +13,7 @@ gpio	led	11	// LED
 gpio	loop	1	// Loop
 gpio	btn	-12	// Button
 
-bit	flash.erase		// Always erase first
-bit	flash.verify		// Verify after flash
-bit	flash.always		// Always flash even if apparently flashed
+bit	flash.erase	.live	// Always erase first
+bit	flash.verify	.live	// Verify after flash
+bit	flash.always	.live	// Always flash even if apparently flashed
 

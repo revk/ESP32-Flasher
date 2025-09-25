@@ -60,7 +60,7 @@ A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% o
 |Single orange|USB connected, checking|
 |Off to blue|Flashing device|
 |All green|ATE passed|
-|Half reg/green|Code seems to be running but no ATE status|
+|Half red/green|Code seems to be running but no ATE status|
 |All or some red|ATE failed|
 |Blue to cyan|Verifying flashed device|
 |Blue to off|Erasing device|

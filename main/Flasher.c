@@ -32,26 +32,14 @@ uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
    ledt = 'K';                  // LED from/to
 
+#define	BLOCK	4096
+
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
 #else
 const char sd_dir[] = "/sd";
 #endif
 
-const char *const chips[] = {
-   "ESP8266",
-   "ESP32",
-   "ESP32S2",
-   "ESP32C3",
-   "ESP32S3",
-   "ESP32C2",
-   "ESP32C5",
-   "ESP32H2",
-   "ESP32C6",
-   "ESP32P4",
-   "ESP_MAX",
-   "ESP_UNKNOWN"
-};
 
 led_strip_handle_t strip = NULL;
 
@@ -193,6 +181,49 @@ enum
    return STATUS_TIMEOUT;
 };
 
+uint32_t
+chip_id (char *dir)
+{                               // Get chip ID, dir has to have enough space
+   const char *const chips[] =
+      { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2", "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
+      "ESP_UNKNOWN"
+   };
+   *dir = 0;
+   target_chip_t chip = esp_loader_get_target ();
+   ESP_LOGE (TAG, "Chip %d", chip);
+   if (chip < sizeof (chips) / sizeof (*chips))
+      dir = strcat (dir, chips[chip]);
+   uint8_t psram = 0;
+   switch (chip)
+   {
+   case ESP32S3_CHIP:
+      {                         // We can get some more info...
+         dir = strcat (dir, "MC");      // Always MC
+         const uint32_t efuse = 0x60007000;
+         const uint32_t block1 = efuse + 0x44;
+         uint32_t r1,
+           r2;
+         if (!esp_loader_read_register (block1 + 12, &r1))
+         {
+            r1 = (r1 >> 21) & 7;
+            if (r1 == 1)
+               dir = strcat (dir, "PICO");
+         }
+         if (!esp_loader_read_register (block1 + 16, &r1) && !esp_loader_read_register (block1 + 20, &r2))
+            psram = ((r1 >> 3) & 3) | ((r2 >> 17) & 4);
+         break;
+      }
+   default:
+      break;                    // Other chip types may be needed
+   }
+   uint32_t size = 0;
+   if (!esp_loader_flash_detect_size (&size) && size)
+      dir += sprintf (dir, "N%u", (uint8_t) (size / 1024 / 1024));
+   if (psram)
+      dir += sprintf (dir, "R%u", psram);
+   return size;
+}
+
 //--------------------------------------------------------------------------------
 // Main
 void
@@ -315,7 +346,7 @@ app_main ()
             .device_disconnected_callback = device_disconnect_cb,
             .device_pid = 0x1001,       // USB direct not serial chip...
             .connection_timeout_ms = 1000,
-            .out_buffer_size = 4096,
+            .out_buffer_size = BLOCK,
             //.acm_host_serial_state_callback = host_serial_cb,
          };
          esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
@@ -324,27 +355,45 @@ app_main ()
             set_led (10, 'K', 'O');
             b.connected = 1;
             uint8_t status = target_status ();
-            if (b.connected && (flashalways || status != STATUS_PASS))
+            if (b.connected && (flashalways || status != STATUS_PASS) && status != STATUS_ERROR)
             {
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
                e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
                if (!e)
                {
-                  target_chip_t chip = esp_loader_get_target ();
-                  ESP_LOGE (TAG, "Chip type %s", chip < sizeof (chips) / sizeof (*chips) ? chips[chip] : "?");
-                  // TODO some chips we can get more info from efuse such as flash and PSRAM
-                  uint32_t size = 0;
-                  if (!esp_loader_flash_detect_size (&size))
-                     ESP_LOGE (TAG, "Flash size %lu", size);
+                  char dir[100] = "";
+                  uint32_t size = chip_id (dir);
                   uint8_t mac[6] = { 0 };
                   if (!esp_loader_read_mac (mac))
                      ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                  ESP_LOGE (TAG, "Dir %s", dir);
 
-                  // TODO flash
+                  if (flasherase && status != STATUS_EMPTY)
+                  {             // Full erase
+                     ESP_LOGE (TAG, "Erase whole flash");
+                     uint32_t p = 0;
+                     while (p < size)
+                     {
+                        set_led (p * 100 / size, 'B', 'K');
+                        e = esp_loader_flash_erase_region (p, BLOCK);
+                        if (e)
+                        {
+                           status = STATUS_ERROR;
+                           break;
+                        }
+                        p += BLOCK;
+                     }
+                  }
+                  if (status != STATUS_ERROR)
+                  {
 
-                  set_led (10, 'K', 'B');
-                  sleep (10);
+                     // TODO flash
+                     set_led (10, 'K', 'B');
+                     sleep (10);
+                     // TODO flash verify
+                  }
+                  // TODO log file
                }
 
                if (b.connected)
