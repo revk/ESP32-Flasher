@@ -38,6 +38,21 @@ const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
 const char sd_dir[] = "/sd";
 #endif
 
+const char *const chips[] = {
+   "ESP8266",
+   "ESP32",
+   "ESP32S2",
+   "ESP32C3",
+   "ESP32S3",
+   "ESP32C2",
+   "ESP32C5",
+   "ESP32H2",
+   "ESP32C6",
+   "ESP32P4",
+   "ESP_MAX",
+   "ESP_UNKNOWN"
+};
+
 led_strip_handle_t strip = NULL;
 
 const char *
@@ -89,7 +104,7 @@ set_led (uint8_t p, char f, char t)
       ledf = f;
    if (t)
       ledt = t;
-   ESP_LOGE (TAG, "LED %c %c %d%%", ledf, ledt, progress);
+   //ESP_LOGE (TAG, "LED %c %c %d%%", ledf, ledt, progress);
 }
 
 void
@@ -268,12 +283,10 @@ app_main ()
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
                e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
-               if (e)
-                  e = esp_loader_connect (&a);  // Some chips don't work with stub
                if (!e)
                {
                   target_chip_t chip = esp_loader_get_target ();
-                  ESP_LOGE (TAG, "Chip type %d", chip);
+                  ESP_LOGE (TAG, "Chip type %s", chip < sizeof (chips) / sizeof (*chips) ? chips[chip] : "?");
                   uint32_t size = 0;
                   if (!esp_loader_flash_detect_size (&size))
                      ESP_LOGE (TAG, "Flash size %lu", size);
@@ -290,9 +303,10 @@ app_main ()
             if (b.connected)
             {
                ESP_LOGE (TAG, "Reset");
-               loader_port_reset_target ();
+               esp_loader_reset_target ();
                // TODO check status
                sleep (10);
+               // TODO log file on flash?
             }
 
             ESP_LOGE (TAG, "Disconnect");
@@ -317,8 +331,6 @@ app_main ()
       int p = revk_ota_progress ();
       if (p >= 0 && p <= 100)
          set_led (p, 'K', 'Y');
-      else
-         break;
       usleep (100000);
    }
 }
