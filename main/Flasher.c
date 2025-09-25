@@ -20,17 +20,13 @@ static const char TAG[] = "Flasher";
 #include "usb/usb_host.h"
 #include "usb/cdc_acm_host.h"
 #include "esp_loader.h"
+#include "esp32_usb_cdc_acm_port.h"
 
 struct
 {
    uint8_t die:1;               // Shutdown
    uint8_t wifi:1;              // WiFi connected
    uint8_t connected:1;         // Connected
-   uint8_t starts:2;            // Client starts count (to spot unstable/rebooting)
-   uint8_t downloader:1;        // Client is waiting for download.
-   uint8_t empty:1;             // Client shows traffic suggesting not flashed
-   uint8_t atefail:1;           // Client shows ATE PASS
-   uint8_t atepass:1;           // Client shows ATE PASS
 } volatile b;
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
@@ -71,9 +67,9 @@ led_task (void *arg)
                l = 10;
             p -= l;
             led_strip_set_pixel (strip, i,      //
-                                 gamma8[l * ((t >> 16) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255],     //
-                                 gamma8[l * ((t >> 8) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255],      //
-                                 gamma8[l * ((t >> 0) & 255) / 255 + (255 - l) * ((f >> 16) & 255) / 255]);
+                                 gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10],        //
+                                 gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10], //
+                                 gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10]);
          }
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
@@ -83,6 +79,17 @@ led_task (void *arg)
       REVK_ERR_CHECK (led_strip_refresh (strip));
    }
    vTaskDelete (NULL);
+}
+
+void
+set_led (uint8_t p, char f, char t)
+{                               // Set LED display state
+   progress = p;
+   if (f)
+      ledf = f;
+   if (t)
+      ledt = t;
+   ESP_LOGE (TAG, "LED %c %c %d%%", ledf, ledt, progress);
 }
 
 void
@@ -111,58 +118,19 @@ usb_lib_task (void *arg)
    }
 }
 
-static void
-client_event (const cdc_acm_host_dev_event_data_t * event, void *user_ctx)
+void
+host_error_cb (void)
 {
-   switch (event->type)
-   {
-   case CDC_ACM_HOST_ERROR:
-      ESP_LOGE (TAG, "CDC-ACM error has occurred, err_no = %i", event->data.error);
-      break;
-   case CDC_ACM_HOST_DEVICE_DISCONNECTED:
-      ESP_LOGE (TAG, "Device suddenly disconnected");
-      cdc_acm_host_close (event->data.cdc_hdl);
-      b.connected = 0;
-      break;
-   case CDC_ACM_HOST_SERIAL_STATE:
-      ESP_LOGE (TAG, "Serial state notif 0x%04X", event->data.serial_state.val);
-      break;
-   case CDC_ACM_HOST_NETWORK_CONNECTION:
-   default:
-      ESP_LOGE (TAG, "Unsupported CDC event: %i", event->type);
-      break;
-   }
+   ESP_LOGE (TAG, "Host error");
 }
 
-static bool
-client_rx (const uint8_t * data, size_t data_len, void *arg)
+void
+device_disconnect_cb (void)
 {
-   ESP_LOGD (TAG, "Rx %d bytes", data_len);
-   //if (!b.empty) printf ("{%.*s}", data_len, data);
-   // We look for specific patterns
-   static char buf[30];
-   while (data_len--)
-   {
-      memmove (buf, buf + 1, sizeof (buf) - 1);
-      buf[sizeof (buf) - 1] = *data++;
-      if (b.starts)
-      {
-         if (!memcmp (buf, "invalid header: 0xffffffff\r\n", 28))
-            b.empty = 1;
-         if (!memcmp (buf, "waiting for download", 20))
-            b.downloader = 1;
-         if (!memcmp (buf, "(DOWNLOAD(USB/UART0))", 20))
-            b.downloader = 1;
-         if (!memcmp (buf, "\nATE: PASS\n", 11))
-            b.atepass = 1;
-         if (!memcmp (buf, "\nATE: FAIL\n", 11))
-            b.atefail = 1;
-      }
-      if (!memcmp (buf, "ESP-ROM:", 8) && b.starts < 3)
-         b.starts++;
-   }
-   return true;
+   ESP_LOGE (TAG, "Host disconnect");
+   b.connected = 0;
 }
+
 
 //--------------------------------------------------------------------------------
 // Main
@@ -212,11 +180,6 @@ app_main ()
       slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;    // Old boards?
    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
    host.slot = SDMMC_HOST_SLOT_1;
-   if (serial3v3)
-   {
-      // TODO
-      ESP_LOGE (TAG, "Serial 3v3 is not done yet");
-   } else
    {                            // USB init
       const usb_host_config_t host_config = {
          .skip_phy_setup = false,
@@ -271,105 +234,51 @@ app_main ()
       ESP_LOGI (TAG, "Mounted SD");
       revk_led (strip, 10, 255, revk_rgb ('G'));
 
-      // TODO function for normal
-      // TODO function for download
-
-      cdc_acm_dev_hdl_t cdc_dev = NULL; // USB device
-      void do_reset (int dl)
-      {
-         if (dl >= 0)
-         {
-            ESP_LOGE (TAG, "Reset%s", dl ? " (download)" : "");
-            if (serial3v3)
-            {
-               // TODO
-            } else
-            {
-               // Sequence from ESP32-S3 technical manual 33.4 - these are DTR/RTS
-               b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
-               if (dl)
-               {
-                  cdc_acm_host_set_control_line_state (cdc_dev, 1, 0);
-                  cdc_acm_host_set_control_line_state (cdc_dev, 1, 1);
-               }
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 1);
-               cdc_acm_host_set_control_line_state (cdc_dev, 0, 0);
-            }
-         }
-         int count = 50;
-         while (revk_gpio_get (sdcd) && !b.die && b.connected && !b.downloader && !b.empty && b.starts < 3 && !b.atepass
-                && !b.atefail && count--)
-            usleep (100000);
-         if (!b.connected)
-            ESP_LOGE (TAG, "Disconnected");
-         else if (b.downloader)
-            ESP_LOGE (TAG, "Ready for download");
-         else if (b.empty)
-            ESP_LOGE (TAG, "Empty ready to flash");
-         else if (b.starts == 3)
-            ESP_LOGE (TAG, "Looping");
-         else if (b.atepass)
-            ESP_LOGE (TAG, "ATE PASS");
-         else if (b.atefail)
-            ESP_LOGE (TAG, "ATE FAIL");
-         else
-            ESP_LOGE (TAG, "Timeout");
-      }
+      // TODO how do we do serial via UART?
 
       while (revk_gpio_get (sdcd) && !b.die)
       {
+         set_led (0, 'K', 'K');
          // TODO Check OTA happening as part of waiting for device
          // TODO check wifi connect and upgrade check while waiting for device
-         if (serial3v3)
+         ESP_LOGE (TAG, "Power on");
+         revk_gpio_output (pwr5, 1);    // device on
+         usb_host_lib_set_root_port_power (true);
+         loader_esp32_usb_cdc_acm_config_t config = {
+            .acm_host_error_callback = host_error_cb,
+            .device_disconnected_callback = device_disconnect_cb,
+            .device_pid = 0x1001,       // USB direct not serial chip...
+	    .connection_timeout_ms = 1000,
+	    .out_buffer_size = 4096,
+            //.acm_host_serial_state_callback = host_serial_cb,
+         };
+         esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
+         if (!e)
          {
-            // TODO
-         } else
-         {
-            // TODO device callback so we can wait for it?
-            revk_gpio_output (pwr5, 1); // device on
-            usb_host_lib_set_root_port_power (true);
-            const cdc_acm_host_device_config_t dev_config = {
-               .connection_timeout_ms = 1000,
-               .out_buffer_size = 512,
-               .in_buffer_size = 512,
-               .user_arg = NULL,
-               .event_cb = client_event,
-               .data_cb = client_rx,
-            };
-            b.downloader = b.empty = b.starts = b.atepass = b.atefail = 0;
             b.connected = 1;
-            e = cdc_acm_host_open (0, 0, 0, &dev_config, &cdc_dev);
-            if (e)
+            if (b.connected)
             {
-               b.connected = 0;
-               usleep (100000);
-               continue;
-            }
-            ESP_LOGE (TAG, "USB Connect");
-         }
-         // TODO flashalways, etc
-         do_reset (-1);         // Check status
-
-         if (b.connected && (b.empty || b.starts == 3 || b.atefail))
-         {                      // Flashing
-            do_reset (1);       // Download mode
-            if (b.downloader)
-            {                   // ready to download
-               ESP_LOGE (TAG, "TODO Download");
+               ESP_LOGE (TAG, "Bootload");
+               esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
+               e = esp_loader_connect_with_stub (&a);     // Some chips don't work with stub
+               //e = esp_loader_connect(&a);
+               ESP_LOGE (TAG, "Loader e=%d", e);
                sleep (10);
-               do_reset (0);    // Check normal working now
             }
-         }
 
-         if (b.connected)
-         {
-            ESP_LOGE (TAG, "Wait try again");
-            while (b.connected)
-               usleep (100000);
+            if (b.connected)
+            {
+               ESP_LOGE (TAG, "Reset");
+               loader_port_reset_target ();
+               sleep (10);
+            }
+
+            ESP_LOGE (TAG, "Disconnect");
+            loader_port_esp32_usb_cdc_acm_deinit ();
          }
+         set_led (0, 'K', 'K');
          ESP_LOGE (TAG, "Power off");
-         if (!serial3v3 && b.connected)
+         if (b.connected)
             usb_host_lib_set_root_port_power (false);
          revk_gpio_output (pwr5, 0);
       }

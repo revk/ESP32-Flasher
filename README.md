@@ -59,10 +59,11 @@ A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% o
 |Off|Waiting for device|
 |Off to blue|Flashing device|
 |All green|ATE passed|
-|All red|ATE failed|
+|All or some red|ATE failed|
 |Blue to cyan|Verifying flashed device|
 |Blue to off|Erasing device|
 |Off to yellow|Flasher s/w upgrade or SD file upload in progress|
+|Single orange|USB connected, checking|
 
 ## Button
 
