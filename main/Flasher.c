@@ -190,15 +190,14 @@ chip_id (char *dir)
    };
    *dir = 0;
    target_chip_t chip = esp_loader_get_target ();
-   ESP_LOGE (TAG, "Chip %d", chip);
    if (chip < sizeof (chips) / sizeof (*chips))
-      dir = strcat (dir, chips[chip]);
+      dir = stpcpy (dir, chips[chip]);
    uint8_t psram = 0;
    switch (chip)
    {
    case ESP32S3_CHIP:
       {                         // We can get some more info...
-         dir = strcat (dir, "MC");      // Always MC
+         dir = stpcpy (dir, "MC");      // Always MC
          const uint32_t efuse = 0x60007000;
          const uint32_t block1 = efuse + 0x44;
          uint32_t r1,
@@ -207,7 +206,7 @@ chip_id (char *dir)
          {
             r1 = (r1 >> 21) & 7;
             if (r1 == 1)
-               dir = strcat (dir, "PICO");
+               dir = stpcpy (dir, "PICO");
          }
          if (!esp_loader_read_register (block1 + 16, &r1) && !esp_loader_read_register (block1 + 20, &r2))
             psram = ((r1 >> 3) & 3) | ((r2 >> 17) & 4);
