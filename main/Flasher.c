@@ -239,8 +239,13 @@ app_main ()
       while (revk_gpio_get (sdcd) && !b.die)
       {
          set_led (0, 'K', 'K');
-         // TODO Check OTA happening as part of waiting for device
-         // TODO check wifi connect and upgrade check while waiting for device
+         if (b.wifi)
+         {
+            b.wifi = 0;
+            revk_command ("upgrade", NULL);
+         }
+         if (revk_shutting_down (NULL))
+            break;
          ESP_LOGE (TAG, "Power on");
          revk_gpio_output (pwr5, 1);    // device on
          usb_host_lib_set_root_port_power (true);
@@ -255,6 +260,7 @@ app_main ()
          esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
          if (!e)
          {
+            set_led (10, 'K', 'O');
             b.connected = 1;
             // TODO check status
             if (b.connected)
@@ -262,9 +268,21 @@ app_main ()
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
                e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
-               //e = esp_loader_connect(&a);
-               ESP_LOGE (TAG, "Loader e=%d", e);
-               sleep (10);
+               if (!e)
+               {
+                  target_chip_t chip = esp_loader_get_target ();
+                  ESP_LOGE (TAG, "Chip type %d", chip);
+                  uint32_t size = 0;
+                  if (!esp_loader_flash_detect_size (&size))
+                     ESP_LOGE (TAG, "Flash size %lu", size);
+                  uint8_t mac[6] = { 0 };
+                  if (!esp_loader_read_mac (mac))
+                     ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+                  set_led (10, 'K', 'B');
+
+                  sleep (10);
+               }
             }
 
             if (b.connected)
@@ -283,10 +301,19 @@ app_main ()
          if (b.connected)
             usb_host_lib_set_root_port_power (false);
          revk_gpio_output (pwr5, 0);
+         sleep (2);
       }
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
+      if (revk_shutting_down (NULL))
+         break;
    }
-
    usb_host_uninstall ();
+
+   while (revk_shutting_down (NULL))
+   {
+      int p = revk_ota_progress ();
+      if (p >= 0 && p <= 100)
+         set_led (p, 'K', 'Y');
+   }
 }
