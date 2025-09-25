@@ -248,19 +248,20 @@ app_main ()
             .acm_host_error_callback = host_error_cb,
             .device_disconnected_callback = device_disconnect_cb,
             .device_pid = 0x1001,       // USB direct not serial chip...
-	    .connection_timeout_ms = 1000,
-	    .out_buffer_size = 4096,
+            .connection_timeout_ms = 1000,
+            .out_buffer_size = 4096,
             //.acm_host_serial_state_callback = host_serial_cb,
          };
          esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
          if (!e)
          {
             b.connected = 1;
+            // TODO check status
             if (b.connected)
             {
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
-               e = esp_loader_connect_with_stub (&a);     // Some chips don't work with stub
+               e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
                //e = esp_loader_connect(&a);
                ESP_LOGE (TAG, "Loader e=%d", e);
                sleep (10);
@@ -270,6 +271,7 @@ app_main ()
             {
                ESP_LOGE (TAG, "Reset");
                loader_port_reset_target ();
+               // TODO check status
                sleep (10);
             }
 
