@@ -531,6 +531,7 @@ app_main ()
                            close (f);
                         }
                      }
+		     // TODO verify
                   }
                   // TODO log file
                   jo_free (&j);
