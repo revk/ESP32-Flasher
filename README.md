@@ -31,6 +31,8 @@ For serial this is slightly non standard as tag-connect has `DTR` on 2 and `RTS`
 
 Note also that the board is desigend to provide 5V (USB incoming pass through) or 3.3V to the power output so it can be used with devices needing either voltage.
 
+**Note that at present serial and use of serial USB chip is not supported because of some library limitations**
+
 ## Basic operation
 
 The basic operation is as follows...
@@ -75,24 +77,30 @@ The button *may* have uses, proposed as follows...
 
 ## SD card file format
 
-The card format expects a directory for each device type. This consists of device tytpe, version, if `MC` (multicore), ROM and RAM size.
+The card format expects a directory for each device type. This consists of device type and version, if `MC` (multicore), ROM and RAM size. It may have `PICO` or similar before ROM size if known. **At present basic type and flash size are supported for all, and for ESP32S3 also PSRAM size, more to be added. Check serial logs for details of what it finds.**
 
-E.g. `ESP32S3NCN4R2` would be an ESP32-S3 multi-core with 4M flash and 2M SPI RAM
+E.g. `ESP32S3MCN4R2` would be an ESP32-S3 multi-core with 4M flash and 2M SPI RAM
 
-Within this directory may be either :-
+The directory needs to contain a file `manifest.json` which is a JSON file with an object that is `"manifest"` which is an array of objects...
 
-1. `image.bin` a single image for the device flashed from `0x00000`
+|Field|Meaning|
+|-----|-------|
+|`"file"`|The file name, in this directory.|
+|`"address"`|The address to flash, either a number or a string - a string is assumed to be HEX, default 0 (for bootloader).|
+|`"url"`|A URL for refreshing the file, ideally `http://` to save memory.|
 
-Or a set of files...
- 
-1. `*-bootloader.bin` (expects only one file matching that format), the bootloader to flash at `0x0000`
-2. `partition-table.bin` the partition table to flash at `0x08000`
-3. `ota_data_initial.bin` to flash at partition table location `otadata`
-4. `*.bin` (one file that is not one of the above) application to flash at `ota_0` location from partition table
+For example...
 
-If we do multiple choice flashing based on button, then a sub-directory called `0` to `9` would be used for the selected image, containing files as above. It may also be that `imageN.bin` is accepted as a simpler way.
-
-TODO: Would be smart to have a URL for files, as a file, in the directory, so they can be checked for an update automatically. Maybe even some sort of manifest.
+```
+{
+ "manifest":[
+  {"file":"MyApp-S3-MINI-N4-R2-bootloader.bin"},
+  {"file":"MyApp-S3-MINI-N4-R2-partition-table.bin","address":"8000"},
+  {"file":"MyApp-S3-MINI-N4-R2-ota_data_initial.bin","address":"D000"},
+  {"file":"MyApp-S3-MINI-N4-R2.bin","address":"10000","url":"http://ota.revk.uk/MyApp-S3-MINI-N4-R2.bin"}
+ ]
+}
+```
 
 ## Target code
 
