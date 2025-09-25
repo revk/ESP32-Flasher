@@ -95,8 +95,8 @@ For example...
 {
  "manifest":[
   {"file":"MyApp-S3-MINI-N4-R2-bootloader.bin"},
-  {"file":"MyApp-S3-MINI-N4-R2-partition-table.bin","address":"8000"},
-  {"file":"MyApp-S3-MINI-N4-R2-ota_data_initial.bin","address":"D000"},
+  {"file":"partition-table.bin","address":"8000"},
+  {"file":"ota_data_initial.bin","address":"D000"},
   {"file":"MyApp-S3-MINI-N4-R2.bin","address":"10000","url":"http://ota.revk.uk/MyApp-S3-MINI-N4-R2.bin"}
  ]
 }
