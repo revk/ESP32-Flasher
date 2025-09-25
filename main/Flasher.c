@@ -268,6 +268,8 @@ app_main ()
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
                e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
+               if (e)
+                  e = esp_loader_connect (&a);  // Some chips don't work with stub
                if (!e)
                {
                   target_chip_t chip = esp_loader_get_target ();
@@ -315,5 +317,8 @@ app_main ()
       int p = revk_ota_progress ();
       if (p >= 0 && p <= 100)
          set_led (p, 'K', 'Y');
+      else
+         break;
+      usleep (100000);
    }
 }
