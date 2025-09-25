@@ -83,8 +83,8 @@ led_task (void *arg)
             p -= l;
             led_strip_set_pixel (strip, i,      //
                                  gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10],        //
-                                 gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10], //
-                                 gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10]);
+                                 gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],  //
+                                 gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
@@ -146,6 +146,52 @@ device_disconnect_cb (void)
    b.connected = 0;
 }
 
+enum
+{
+   STATUS_ERROR,
+   STATUS_SILENT,               // no data
+   STATUS_EMPTY,                // 0xffffffff error
+   STATUS_LOOPING,              // Starting multiple times
+   STATUS_FAIL,                 // ATE: FAIL
+   STATUS_PASS,                 // ATE: PASS
+   STATUS_TIMEOUT,              // Not looping but not pass/fail
+} target_status (void)
+{
+   uint32_t to = uptime () + 5;
+   char buf[100];
+   uint8_t p = 0;
+   uint8_t rst = 0;
+   while (uptime () <= to)
+   {
+      uint8_t c;
+      esp_loader_error_t e = loader_port_read (&c, 1, 100);
+      if (e == ESP_LOADER_ERROR_TIMEOUT)
+         continue;
+      if (e)
+         return STATUS_ERROR;
+      if (c >= ' ')
+      {
+         if (p < sizeof (buf) - 1)
+            buf[p++] = c;
+         continue;
+      }
+      if (!p)
+         continue;
+      buf[p] = 0;
+      p = 0;
+      if (!strcmp (buf, "invalid header: 0xffffffff"))
+         return STATUS_EMPTY;
+      if (!strcmp (buf, "ATE: PASS"))
+         return STATUS_PASS;
+      if (!strcmp (buf, "ATE: FAIL"))
+         return STATUS_FAIL;
+      if (!strncmp (buf, "Build:", 6) && rst++ > 4)
+         return STATUS_LOOPING;
+   }
+   if (!rst)
+      return STATUS_SILENT;
+   return STATUS_TIMEOUT;
+};
 
 //--------------------------------------------------------------------------------
 // Main
@@ -251,6 +297,9 @@ app_main ()
 
       // TODO how do we do serial via UART?
 
+      ESP_LOGE (TAG, "Power on");
+      revk_gpio_output (pwr5, 1);       // device on
+      usb_host_lib_set_root_port_power (true);
       while (revk_gpio_get (sdcd) && !b.die)
       {
          set_led (0, 'K', 'K');
@@ -261,9 +310,6 @@ app_main ()
          }
          if (revk_shutting_down (NULL))
             break;
-         ESP_LOGE (TAG, "Power on");
-         revk_gpio_output (pwr5, 1);    // device on
-         usb_host_lib_set_root_port_power (true);
          loader_esp32_usb_cdc_acm_config_t config = {
             .acm_host_error_callback = host_error_cb,
             .device_disconnected_callback = device_disconnect_cb,
@@ -277,8 +323,8 @@ app_main ()
          {
             set_led (10, 'K', 'O');
             b.connected = 1;
-            // TODO check status
-            if (b.connected)
+            uint8_t status = target_status ();
+            if (b.connected && (flashalways || status != STATUS_PASS))
             {
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
@@ -287,6 +333,7 @@ app_main ()
                {
                   target_chip_t chip = esp_loader_get_target ();
                   ESP_LOGE (TAG, "Chip type %s", chip < sizeof (chips) / sizeof (*chips) ? chips[chip] : "?");
+                  // TODO some chips we can get more info from efuse such as flash and PSRAM
                   uint32_t size = 0;
                   if (!esp_loader_flash_detect_size (&size))
                      ESP_LOGE (TAG, "Flash size %lu", size);
@@ -294,31 +341,55 @@ app_main ()
                   if (!esp_loader_read_mac (mac))
                      ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-                  set_led (10, 'K', 'B');
+                  // TODO flash
 
+                  set_led (10, 'K', 'B');
                   sleep (10);
                }
-            }
 
+               if (b.connected)
+               {
+                  ESP_LOGE (TAG, "Reset");
+                  esp_loader_reset_target ();
+                  status = target_status ();
+               }
+            }
+            switch (status)
+            {
+            case STATUS_PASS:
+               set_led (100, 'K', 'G');
+               break;
+            case STATUS_FAIL:
+               set_led (100, 'K', 'R');
+               break;
+            case STATUS_TIMEOUT:
+               set_led (50, 'R', 'G');
+               break;
+            case STATUS_LOOPING:
+               set_led (90, 'K', 'R');
+               break;
+            case STATUS_SILENT:
+               set_led (80, 'K', 'R');
+               break;
+            case STATUS_EMPTY:
+               set_led (70, 'K', 'R');
+               break;
+            default:
+               set_led (10, 'K', 'R');
+            }
             if (b.connected)
             {
-               ESP_LOGE (TAG, "Reset");
-               esp_loader_reset_target ();
-               // TODO check status
-               sleep (10);
-               // TODO log file on flash?
+               ESP_LOGE (TAG, "Wait disconnect");
+               while (b.connected)
+                  usleep (100000);
             }
-
-            ESP_LOGE (TAG, "Disconnect");
             loader_port_esp32_usb_cdc_acm_deinit ();
          }
-         set_led (0, 'K', 'K');
-         ESP_LOGE (TAG, "Power off");
-         if (b.connected)
-            usb_host_lib_set_root_port_power (false);
-         revk_gpio_output (pwr5, 0);
-         sleep (2);
       }
+      ESP_LOGE (TAG, "Power off");
+      if (b.connected)
+         usb_host_lib_set_root_port_power (false);
+      revk_gpio_output (pwr5, 0);
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
       if (revk_shutting_down (NULL))
