@@ -33,6 +33,7 @@ char ledf = 'K',
    ledt = 'K';                  // LED from/to
 
 #define	BLOCK	4096
+uint8_t block[BLOCK];
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
@@ -189,6 +190,8 @@ chip_id (char *dir)
       "ESP_UNKNOWN"
    };
    *dir = 0;
+   dir = stpcpy (dir, sd_dir);
+   dir = stpcpy (dir, "/");
    target_chip_t chip = esp_loader_get_target ();
    if (chip < sizeof (chips) / sizeof (*chips))
       dir = stpcpy (dir, chips[chip]);
@@ -220,6 +223,7 @@ chip_id (char *dir)
       dir += sprintf (dir, "N%u", (uint8_t) (size / 1024 / 1024));
    if (psram)
       dir += sprintf (dir, "R%u", psram);
+   dir = stpcpy (dir, "/");
    return size;
 }
 
@@ -361,14 +365,49 @@ app_main ()
                e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
                if (!e)
                {
-                  char dir[100] = "";
+                  char dir[200] = "";   // For dir and file names
                   uint32_t size = chip_id (dir);
                   uint8_t mac[6] = { 0 };
-                  if (!esp_loader_read_mac (mac))
+                  if (b.connected && !esp_loader_read_mac (mac))
                      ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                   ESP_LOGE (TAG, "Dir %s", dir);
-
-                  if (flasherase && status != STATUS_EMPTY)
+                  char *fn = dir + strlen (dir);
+                  char *manifest = NULL;
+                  jo_t j = NULL;
+                  strcpy (fn, "manifest.json");
+                  int f = open (dir, O_RDONLY);
+                  if (f < 0)
+                  {
+                     ESP_LOGE (TAG, "Failed to open %s", dir);
+                     status = STATUS_ERROR;
+                  } else
+                  {
+                     struct stat s = { 0 };
+                     fstat (f, &s);
+                     if (s.st_size && s.st_size < 10000)
+                     {
+                        manifest = malloc (s.st_size);
+                        if (read (f, manifest, s.st_size) != s.st_size)
+                        {
+                           status = STATUS_ERROR;
+                           ESP_LOGE (TAG, "Manifest read fail %s", dir);
+                        } else
+                        {
+                           j = jo_parse_mem (manifest, s.st_size);
+                           if (!j)
+                           {
+                              status = STATUS_ERROR;
+                              ESP_LOGE (TAG, "Manifest bad JSON %s", dir);
+                           }
+                        }
+                     } else
+                     {
+                        status = STATUS_ERROR;
+                        ESP_LOGE (TAG, "Manifest bad size (%u) %s", s.st_size, dir);
+                     }
+                     close (f);
+                  }
+                  if (flasherase && status != STATUS_EMPTY && status != STATUS_ERROR)
                   {             // Full erase
                      ESP_LOGE (TAG, "Erase whole flash");
                      uint32_t p = 0;
@@ -379,20 +418,123 @@ app_main ()
                         if (e)
                         {
                            status = STATUS_ERROR;
+                           ESP_LOGE (TAG, "Flash failed");
                            break;
                         }
                         p += BLOCK;
                      }
                   }
+                  uint32_t total = 0;   // Total flash size
+                  if (status != STATUS_ERROR && j)
+                  {             // Check manifest
+                     jo_rewind (j);
+                     if (jo_here (j) == JO_OBJECT)
+                        jo_find (j, "manifest");
+                     if (jo_here (j) != JO_ARRAY)
+                     {
+                        status = STATUS_ERROR;
+                        ESP_LOGE (TAG, "Manifest not array");
+                     } else
+                     {
+                        while (jo_next (j) == JO_OBJECT && status != STATUS_ERROR)
+                        {
+                           *fn = 0;
+                           while (jo_next (j) == JO_TAG)
+                           {
+                              if (!jo_strcmp (j, "file"))
+                              {
+                                 if (jo_next (j) == JO_STRING)
+                                    jo_strncpy (j, fn, sizeof (dir) - (fn - dir) - 1);
+                              } else
+                                 jo_next (j);
+                           }
+                           jo_skip (j);
+                           if (status != STATUS_ERROR && !*fn)
+                           {
+                              status = STATUS_ERROR;
+                              ESP_LOGE (TAG, "Missing filename");
+                           }
+                           if (status != STATUS_ERROR)
+                           {
+                              int f = open (dir, O_RDONLY);
+                              if (f < 0)
+                              {
+                                 status = STATUS_ERROR;
+                                 ESP_LOGE (TAG, "Missing file %s", dir);
+                              } else
+                              {
+                                 struct stat s = { 0 };
+                                 fstat (f, &s);
+                                 total += s.st_size;
+                                 close (f);
+                              }
+                           }
+                        }
+                     }
+                  }
                   if (status != STATUS_ERROR)
-                  {
-
-                     // TODO flash
-                     set_led (10, 'K', 'B');
-                     sleep (10);
-                     // TODO flash verify
+                  {             // Flash
+                     ESP_LOGE (TAG, "Flash %u bytes", total);
+                     uint32_t bytes = 0;
+                     jo_rewind (j);
+                     if (jo_here (j) == JO_OBJECT)
+                        jo_find (j, "manifest");
+                     while (jo_next (j) == JO_OBJECT && status != STATUS_ERROR)
+                     {
+                        uint32_t address = 0;
+                        *fn = 0;
+                        while (jo_next (j) == JO_TAG)
+                        {
+                           if (!jo_strcmp (j, "file"))
+                           {
+                              if (jo_next (j) == JO_STRING)
+                                 jo_strncpy (j, fn, sizeof (dir) - (fn - dir) - 1);
+                           } else if (!jo_strcmp (j, "address"))
+                           {
+                              jo_type_t t = jo_next (j);
+                              if (t == JO_STRING)
+                              {
+                                 char temp[10];
+                                 jo_strncpy (j, temp, sizeof (temp));
+                                 address = strtoul (temp, NULL, 16);
+                              } else if (t == JO_NUMBER)
+                                 address = jo_read_int (j);
+                           } else
+                              jo_next (j);
+                        }
+                        int f = open (dir, O_RDONLY);
+                        if (f >= 0)
+                        {
+                           struct stat s = { 0 };
+                           fstat (f, &s);
+                           ESP_LOGE (TAG, "Flash %s to 0x%lX size %u", dir, address, s.st_size);
+                           e = esp_loader_flash_start (address, s.st_size, BLOCK);
+                           if (!e)
+                           {
+                              uint32_t p = 0;
+                              while (p < s.st_size)
+                              {
+                                 set_led (bytes * 100 / total, 'K', 'B');
+                                 uint32_t s = read (f, block, BLOCK);
+                                 e = esp_loader_flash_write (block, s);
+                                 if (e)
+                                 {
+                                    ESP_LOGE (TAG, "Flash fail");
+                                    status = STATUS_ERROR;
+                                    break;
+                                 }
+                                 p += s;
+                                 bytes += s;
+                              }
+                           }
+                           e = esp_loader_flash_finish (false);
+                           close (f);
+                        }
+                     }
                   }
                   // TODO log file
+                  jo_free (&j);
+                  free (manifest);
                }
 
                if (b.connected)
