@@ -13,6 +13,8 @@ gpio	led	11	// LED
 gpio	loop	1	// Loop
 gpio	btn	-12	// Button
 
+u8	manifest	// Selected manifest 0-9
+
 bit	flash.erase	.live	// Always erase first
 bit	flash.verify	.live	// Verify after flash
 bit	flash.always	.live	// Always flash even if apparently flashed

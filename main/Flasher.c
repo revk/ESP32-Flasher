@@ -27,6 +27,7 @@ struct
    uint8_t die:1;               // Shutdown
    uint8_t wifi:1;              // WiFi connected
    uint8_t connected:1;         // Connected
+   uint8_t fileerror:1;         // File error
 } volatile b;
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
@@ -60,8 +61,10 @@ led_task (void *arg)
 {
    if (strip)
    {
+      uint8_t tick = 0;
       while (!b.die)
       {
+         tick++;
          uint32_t f = revk_rgb (ledf);
          uint32_t t = revk_rgb (ledt);
          uint8_t p = progress;
@@ -71,12 +74,18 @@ led_task (void *arg)
             if (l > 10)
                l = 10;
             p -= l;
-            led_strip_set_pixel (strip, i,      //
-                                 gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10],        //
-                                 gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],  //
-                                 gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
+            if ((b.fileerror && (tick & 1)) || (f == t && i != progress / 10))
+               led_strip_set_pixel (strip, i, 0, 0, 0); // Off
+            else
+               led_strip_set_pixel (strip, i,   //
+                                    gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10],     //
+                                    gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],       //
+                                    gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
-         revk_led (strip, 10, 255, revk_rgb (ledsd));
+         if (b.fileerror && !(tick & 1))
+            revk_led (strip, 10, 0, 0);
+         else
+            revk_led (strip, 10, 255, revk_rgb (ledsd));
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
       }
@@ -89,7 +98,7 @@ led_task (void *arg)
 
 void
 set_led (uint8_t p, char f, char t)
-{                               // Set LED display state
+{                               // Set LED display state (if f==t then one LED at progress point)
    progress = p;
    if (f)
       ledf = f;
@@ -373,7 +382,7 @@ app_main ()
                      ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                   ESP_LOGE (TAG, "Dir %s", dir);
                   char *fn = dir + strlen (dir);
-                  char *manifest = NULL;
+                  char *manifestjson = NULL;
                   jo_t j = NULL;
                   strcpy (fn, "manifest.json");
                   int f = open (dir, O_RDONLY);
@@ -387,14 +396,14 @@ app_main ()
                      fstat (f, &s);
                      if (s.st_size && s.st_size < 10000)
                      {
-                        manifest = malloc (s.st_size);
-                        if (read (f, manifest, s.st_size) != s.st_size)
+                        manifestjson = malloc (s.st_size);
+                        if (read (f, manifestjson, s.st_size) != s.st_size)
                         {
                            status = STATUS_ERROR;
                            ESP_LOGE (TAG, "Manifest read fail %s", dir);
                         } else
                         {
-                           j = jo_parse_mem (manifest, s.st_size);
+                           j = jo_parse_mem (manifestjson, s.st_size);
                            if (!j)
                            {
                               status = STATUS_ERROR;
@@ -536,7 +545,7 @@ app_main ()
                   }
                   // TODO log file
                   jo_free (&j);
-                  free (manifest);
+                  free (manifestjson);
                }
 
                if (b.connected)
