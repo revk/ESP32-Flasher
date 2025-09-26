@@ -40,6 +40,8 @@ char ledf = 'K',
 uint8_t mac[6] = { 0 };         // Found mac
 char chip[30] = { 0 };          // Found chip type
 
+uint32_t badusb = 0;            // Last devices 0 even
+
 uint32_t flashsize = 0;         // Found flash size
 
 #define	BLOCK	4096
@@ -166,6 +168,15 @@ usb_lib_task (void *arg)
       usb_host_lib_handle_events (portMAX_DELAY, &event_flags);
       if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS)
          usb_host_device_free_all ();
+      if (!event_flags)
+      {
+         usb_host_lib_info_t i;
+         usb_host_lib_info (&i);
+         if (i.num_devices)
+            badusb = 0;
+         else
+            badusb = uptime ();
+      }
    }
 }
 
@@ -590,10 +601,13 @@ flash_task (void *arg)
          ESP_LOGE (TAG, "Power on");
          revk_gpio_output (pwr5, 1);    // device on
          usb_host_lib_set_root_port_power (true);
-         while (revk_gpio_get (sdcd) && !b.die && !b.reload)
+         while (revk_gpio_get (sdcd) && !b.die && !b.reload && !revk_shutting_down (NULL))
          {
             b.fileerror = 0;
-            set_led (manifest * 10, 'M', 'M');
+            if (badusb && badusb < uptime () && badusb + 2 > uptime ())
+               set_led (manifest * 10, 'R', 'R');       // Likely diff device
+            else
+               set_led (manifest * 10, 'M', 'M');
             if (b.wifi)
             {
                b.wifi = 0;
