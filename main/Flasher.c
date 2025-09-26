@@ -737,7 +737,8 @@ flash_task (void *arg)
             {                   // Connected
                set_led (manifest * 10, 'O', 'O');
                uint8_t status = target_status ();
-               if (b.connected && (b.forceerase || b.erase || status != STATUS_PASS) && status != STATUS_ERROR)
+               if (b.connected && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL))
+                   && status != STATUS_ERROR)
                {
                   ESP_LOGE (TAG, "Bootload");
                   esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
