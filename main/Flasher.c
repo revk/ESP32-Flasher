@@ -29,18 +29,18 @@ struct
    uint8_t reload:1;            // Re load manifest, etc
    uint8_t forceerase:1;        // Force erase
    uint8_t erase:1;             // Manifest says erase
-   uint8_t verify:1;            // Manifest says verify
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
 } volatile b;
-uint16_t maifests = 0;          // Bit map of manifests on SD
+uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
    ledt = 'K',
    ledsd = 'B';                 // LED from/to and SD
-uint8_t mac[6]={0};		// Found mac
-char chip[30]={0};		// Found chip type
-uint32_t flashsize=0;	// Found flash size
+uint8_t mac[6] = { 0 };         // Found mac
+char chip[30] = { 0 };          // Found chip type
+
+uint32_t flashsize = 0;         // Found flash size
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -91,7 +91,7 @@ led_task (void *arg)
                                     gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
          if (b.fileerror && !(tick & 1))
-            revk_led (strip, 10, 0, 0);
+            revk_led (strip, 10, 255, 'R');
          else
             revk_led (strip, 10, 255, revk_rgb (ledsd));
          REVK_ERR_CHECK (led_strip_refresh (strip));
@@ -128,9 +128,24 @@ btn_task (void *arg)
             {
                b.forceerase = 1;
                b.reload = 1;
-            } else
-            {                   // TODO select manifest
-
+            } else if (manifests)
+            {
+               uint8_t m = manifest;
+               do
+               {
+                  m++;
+                  if (m == 10)
+                     m = 0;
+               }
+               while (manifests & (1 << m));
+               if (m != manifest)
+               {
+                  jo_t j = jo_object_alloc ();
+                  jo_int (j, "manifest", m);
+                  revk_setting (j);
+                  jo_free (&j);
+                  b.reload = 1;
+               }
             }
             while (revk_gpio_get (btn))
                usleep (100000);
@@ -221,25 +236,24 @@ enum
    return STATUS_TIMEOUT;
 };
 
-uint32_t
-chip_id (char *dir)
-{                               // Get chip ID, dir has to have enough space
+void
+chip_info (void)
+{                               // Get chip info
    const char *const chips[] =
       { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2", "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
       "ESP_UNKNOWN"
    };
-   *dir = 0;
-   dir = stpcpy (dir, sd_dir);
-   dir = stpcpy (dir, "/");
-   target_chip_t chip = esp_loader_get_target ();
-   if (chip < sizeof (chips) / sizeof (*chips))
-      dir = stpcpy (dir, chips[chip]);
+   char *c = chip;
+   *c = 0;
+   target_chip_t id = esp_loader_get_target ();
+   if (id < sizeof (chips) / sizeof (*chips))
+      c = stpcpy (c, chips[id]);
    uint8_t psram = 0;
-   switch (chip)
+   switch (id)
    {
    case ESP32S3_CHIP:
       {                         // We can get some more info...
-         dir = stpcpy (dir, "MC");      // Always MC
+         c = stpcpy (c, "MC");  // Always MC
          const uint32_t efuse = 0x60007000;
          const uint32_t block1 = efuse + 0x44;
          uint32_t r1,
@@ -248,7 +262,7 @@ chip_id (char *dir)
          {
             r1 = (r1 >> 21) & 7;
             if (r1 == 1)
-               dir = stpcpy (dir, "PICO");
+               c = stpcpy (c, "PICO");
          }
          if (!esp_loader_read_register (block1 + 16, &r1) && !esp_loader_read_register (block1 + 20, &r2))
             psram = ((r1 >> 3) & 3) | ((r2 >> 17) & 4);
@@ -257,46 +271,217 @@ chip_id (char *dir)
    default:
       break;                    // Other chip types may be needed
    }
-   uint32_t size = 0;
-   if (!esp_loader_flash_detect_size (&size) && size)
-      dir += sprintf (dir, "N%u", (uint8_t) (size / 1024 / 1024));
+   flashsize = 0;
+   if (!esp_loader_flash_detect_size (&flashsize) && flashsize)
+      c += sprintf (c, "N%u", (uint8_t) (flashsize / 1024 / 1024));
    if (psram)
-      dir += sprintf (dir, "R%u", psram);
-   dir = stpcpy (dir, "/");
-   return size;
+      c += sprintf (c, "R%u", psram);
+   *c = 0;
+   if (b.connected && !esp_loader_read_mac (mac))
+      ESP_LOGE (TAG, "Chip %02X:%02X:%02X:%02X:%02X:%02X %s", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], chip);
 }
 
-//--------------------------------------------------------------------------------
-// Main
+char *manifestjson = NULL;      // Loaded manifest JSON
+uint32_t manifestsize = 0;      // Total flash bytes
+jo_t j = NULL;                  // Parsed manifest JSON
+
 void
-app_main ()
+close_manifest (void)
+{
+   if (!manifestjson)
+      return;
+   jo_free (&j);
+   free (manifestjson);
+   manifestjson = NULL;
+}
+
+typedef void manifest_t (char *filename, char *url, int f, uint32_t address, uint32_t size);
+
+void
+scan_manifest (manifest_t cb)
+{
+   if (!j)
+      return;
+   jo_rewind (j);
+   if (jo_find (j, "flash") == JO_ARRAY)
+   {
+      while (jo_next (j) == JO_OBJECT)
+      {
+         uint32_t address = 0;
+         char *filename = NULL;
+         char *url = NULL;
+         while (jo_next (j) == JO_TAG)
+         {
+            if (!jo_strcmp (j, "filename") && !filename)
+            {
+               if (jo_next (j) == JO_STRING)
+                  filename = jo_strdup (j);
+            } else if (!jo_strcmp (j, "url") && !url)
+            {
+               if (jo_next (j) == JO_STRING)
+                  url = jo_strdup (j);
+            } else if (!jo_strcmp (j, "address") && !url)
+            {
+               jo_type_t t = jo_next (j);
+               if (t == JO_NUMBER)
+                  address = jo_read_int (j);
+               else if (t == JO_STRING)
+               {
+                  char *a = jo_strdup (j);
+                  address = strtoul (a, NULL, 16);
+                  free (a);
+               }
+            } else
+               jo_next (j);
+         }
+         if (filename)
+         {
+            char *fn = NULL;
+            if (asprintf (&fn, "%s/%s", sd_dir, filename) >= 0)
+            {
+               int f = open (fn, O_RDONLY);
+               if (f >= 0)
+               {
+                  struct stat s = { 0 };
+                  fstat (f, &s);
+                  if (cb)
+                     cb (filename, url, f, address, s.st_size);
+                  close (f);
+               } else if (cb)
+                  cb (filename, url, -1, address, 0);
+               free (fn);
+            }
+         } else if (cb)
+            cb (filename, url, -1, address, 0);
+         free (filename);
+         free (url);
+      }
+   }
+}
+
+void
+load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+{
+   if (!size)
+      manifestsize = -1;
+   else if (manifestsize != 1)
+      manifestsize += size;
+}
+
+const char *
+load_manifest (void)
+{
+   close_manifest ();
+   char *fn = NULL;
+   asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
+   int f = open (fn, O_RDONLY);
+   if (f < 0)
+   {
+      free (fn);
+      return "Failed to open";
+   }
+   struct stat s = { 0 };
+   fstat (f, &s);
+   if (!s.st_size || s.st_size > 10000)
+   {                            // Silly
+      close (f);
+      free (fn);
+      return "Silly size";
+   }
+   manifestjson = malloc (s.st_size);
+   if (!manifestjson)
+   {
+      close (f);
+      free (fn);
+      return "Malloc fail";
+   }
+   if (read (f, manifestjson, s.st_size) != s.st_size)
+   {
+      close (f);
+      free (manifestjson);
+      manifestjson = NULL;
+      free (fn);
+      return "Read fail";
+   }
+   j = jo_parse_mem (manifestjson, s.st_size);
+   if (!j)
+   {
+      close (f);
+      free (manifestjson);
+      manifestjson = NULL;
+      free (fn);
+      return "Bad JSON";
+   }
+   close (f);
+   free (fn);
+   b.erase = (jo_find (j, "erase") == JO_TRUE);
+   manifestsize = 0;
+   scan_manifest (load_cb);
+   if (manifestsize == -1)
+      return "Missing files";
+   return NULL;
+}
+
+esp_loader_error_t
+do_erase (void)
+{
+   b.forceerase = 0;
+   ESP_LOGE (TAG, "Erase whole flash");
+   uint32_t p = 0;
+   while (p < flashsize && !b.reload)
+   {
+      set_led (p * 100 / flashsize, 'B', 'K');
+      esp_loader_error_t e = esp_loader_flash_erase_region (p, BLOCK);
+      if (e)
+         return e;
+      p += BLOCK;
+   }
+   return 0;
+}
+
+uint32_t flashcount = 0;
+esp_loader_error_t flashe = 0;
+
+void
+flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+{
+   ESP_LOGE (TAG, "Flash to %05X len %05X %s", address, size, filename);
+   if (flashe || f < 0 || !size)
+      return;
+   flashe = esp_loader_flash_start (address, size, BLOCK);
+   if (!flashe)
+   {
+      uint32_t p = 0;
+      while (p < size)
+      {
+         set_led (flashcount * 100 / manifestsize, 'K', 'B');
+         uint32_t s = read (f, block, BLOCK);
+         flashe = esp_loader_flash_write (block, s);
+         if (flashe)
+            return;
+         p += s;
+         flashcount += s;
+      }
+   }
+   flashe = esp_loader_flash_finish (false);
+   if (!flashe)
+      flashe = esp_loader_flash_verify ();
+}
+
+esp_loader_error_t
+do_flash (void)
+{
+   ESP_LOGE (TAG, "Flash %u bytes", manifestsize);
+   flashe = 0;
+   flashcount = 0;
+   scan_manifest (flash_cb);
+   return flashe;
+}
+
+void
+flash_task (void *arg)
 {
    esp_err_t e = 0;
-   ESP_LOGE (TAG, "Started");
-   revk_boot (&mqtt_client_callback);
-   revk_start ();
-   revk_gpio_output (pwr3, 0);
-   revk_gpio_output (pwr5, 0);
-   {                            // LED
-      led_strip_config_t strip_config = {
-         .strip_gpio_num = led.num,
-         .max_leds = 11,
-         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
-         .led_model = LED_MODEL_WS2812, // LED strip model
-         .flags.invert_out = led.invert,
-      };
-      led_strip_rmt_config_t rmt_config = {
-         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
-         .resolution_hz = 10 * 1000 * 1000,     // 10 MHz
-      };
-#ifdef	CONFIG_IDF_TARGET_ESP32S3
-      rmt_config.flags.with_dma = true;
-#endif
-      REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
-      revk_task ("led", led_task, NULL, 4);
-   }
-   revk_gpio_input (btn);
-   revk_task ("btn", btn_task, NULL, 4);
    // SD card set up
    revk_gpio_input (sdcd);
    sdmmc_card_t *card = NULL;
@@ -373,267 +558,149 @@ app_main ()
       ESP_LOGI (TAG, "Mounted SD");
       ledsd = 'G';
 
-      // TODO how do we do serial via UART?
-
-      ESP_LOGE (TAG, "Power on");
-      revk_gpio_output (pwr5, 1);       // device on
-      usb_host_lib_set_root_port_power (true);
-      while (revk_gpio_get (sdcd) && !b.die && !b.reload)
-      {
-         set_led (manifest * 10, 'M', 'M');
-         if (b.wifi)
+      {                         // Check manifests
+         manifests = 0;
+         for (int i = 0; i < 10; i++)
          {
-            b.wifi = 0;
-            revk_command ("upgrade", NULL);
-            b.reload = 1;
-            continue;
+            char *fn;
+            asprintf (&fn, "%s/manifest%d.json", sd_dir, i);
+            if (!access (fn, R_OK))
+               manifests |= (1 << i);
          }
-         if (!b.connected)
-         {
-            usleep (100000);
-            continue;
-         }
-         loader_esp32_usb_cdc_acm_config_t config = {
-            .acm_host_error_callback = host_error_cb,
-            .device_disconnected_callback = device_disconnect_cb,
-            .device_pid = 0x1001,       // USB direct not serial chip...
-            .connection_timeout_ms = 1000,
-            .out_buffer_size = BLOCK,
-            //.acm_host_serial_state_callback = host_serial_cb,
-         };
-         esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
+         ESP_LOGE (TAG, "Manifests %X", manifests);
+      }
+      {                         // Manifest
+         const char *e = load_manifest ();
          if (e)
-         {                      // try non JTAG
-            config.device_pid = 0;
-            e = loader_port_esp32_usb_cdc_acm_init (&config);
-         }
-         if (!e)
          {
-            set_led (manifest * 10, 'O', 'O');
-            uint8_t status = target_status ();
-            if (b.connected && (b.forceerase || b.erase || status != STATUS_PASS) && status != STATUS_ERROR)
+            ESP_LOGE (TAG, "Manifest fail: %s", e);
+            b.fileerror = 1;
+         } else
+            b.fileerror = 0;
+      }
+
+      if (!b.fileerror)
+      {
+         // TODO how do we do serial via UART?
+         ESP_LOGE (TAG, "Power on");
+         revk_gpio_output (pwr5, 1);    // device on
+         usb_host_lib_set_root_port_power (true);
+         while (revk_gpio_get (sdcd) && !b.die && !b.reload)
+         {
+            b.fileerror = 0;
+            set_led (manifest * 10, 'M', 'M');
+            if (b.wifi)
             {
-               ESP_LOGE (TAG, "Bootload");
-               esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
-               e = esp_loader_connect_with_stub (&a);   // Some chips don't work with stub
-               if (!e)
+               b.wifi = 0;
+               revk_command ("upgrade", NULL);
+               b.reload = 1;
+               continue;
+            }
+            if (!b.connected)
+            {
+               usleep (100000);
+               continue;
+            }
+            loader_esp32_usb_cdc_acm_config_t config = {
+               .acm_host_error_callback = host_error_cb,
+               .device_disconnected_callback = device_disconnect_cb,
+               .device_pid = 0x1001,    // USB direct not serial chip...
+               .connection_timeout_ms = 1000,
+               .out_buffer_size = BLOCK,
+               //.acm_host_serial_state_callback = host_serial_cb,
+            };
+            esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
+            if (e)
+            {                   // try non JTAG
+               config.device_pid = 0;
+               e = loader_port_esp32_usb_cdc_acm_init (&config);
+            }
+            if (!e)
+            {                   // Connected
+               set_led (manifest * 10, 'O', 'O');
+               uint8_t status = target_status ();
+               if (b.connected && (b.forceerase || b.erase || status != STATUS_PASS) && status != STATUS_ERROR)
                {
-                  char dir[200] = "";   // For dir and file names
-                  flashsize = chip_id (dir);
-                  if (b.connected && !esp_loader_read_mac (mac))
-                     ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                  ESP_LOGE (TAG, "Dir %s", dir);
-                  char *fn = dir + strlen (dir);
-                  char *manifestjson = NULL;
-                  jo_t j = NULL;
-                  strcpy (fn, "manifest.json");
-                  int f = open (dir, O_RDONLY);
-                  if (f < 0)
+                  ESP_LOGE (TAG, "Bootload");
+                  esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
+                  e = esp_loader_connect_with_stub (&a);        // Some chips don't work with stub
+                  if (e)
                   {
-                     ESP_LOGE (TAG, "Failed to open %s", dir);
+                     ESP_LOGE (TAG, "Failed to connect in downloader mode");
                      status = STATUS_ERROR;
-                  } else
-                  {
-                     struct stat s = { 0 };
-                     fstat (f, &s);
-                     if (s.st_size && s.st_size < 10000)
-                     {
-                        manifestjson = malloc (s.st_size);
-                        if (read (f, manifestjson, s.st_size) != s.st_size)
-                        {
-                           status = STATUS_ERROR;
-                           ESP_LOGE (TAG, "Manifest read fail %s", dir);
-                        } else
-                        {
-                           j = jo_parse_mem (manifestjson, s.st_size);
-                           if (!j)
-                           {
-                              status = STATUS_ERROR;
-                              ESP_LOGE (TAG, "Manifest bad JSON %s", dir);
-                           }
-                        }
-                     } else
-                     {
-                        status = STATUS_ERROR;
-                        ESP_LOGE (TAG, "Manifest bad size (%u) %s", s.st_size, dir);
-                     }
-                     close (f);
-                  }
-                  if ((b.forceerase || b.erase) && status != STATUS_EMPTY && status != STATUS_ERROR)
-                  {             // Full erase
-                     b.forceerase = 0;
-                     ESP_LOGE (TAG, "Erase whole flash");
-                     uint32_t p = 0;
-                     while (p < flashsize && !b.reload)
-                     {
-                        set_led (p * 100 / flashsize, 'B', 'K');
-                        e = esp_loader_flash_erase_region (p, BLOCK);
-                        if (e)
-                        {
-                           status = STATUS_ERROR;
-                           ESP_LOGE (TAG, "Flash failed");
-                           break;
-                        }
-                        p += BLOCK;
-                     }
-                  }
-                  uint32_t total = 0;   // Total flash size
-                  if (status != STATUS_ERROR && j)
-                  {             // Check manifest
-                     jo_rewind (j);
-                     if (jo_here (j) == JO_OBJECT)
-                        jo_find (j, "manifest");
-                     if (jo_here (j) != JO_ARRAY)
-                     {
-                        status = STATUS_ERROR;
-                        ESP_LOGE (TAG, "Manifest not array");
-                     } else
-                     {
-                        while (jo_next (j) == JO_OBJECT && status != STATUS_ERROR)
-                        {
-                           *fn = 0;
-                           while (jo_next (j) == JO_TAG)
-                           {
-                              if (!jo_strcmp (j, "file"))
-                              {
-                                 if (jo_next (j) == JO_STRING)
-                                    jo_strncpy (j, fn, sizeof (dir) - (fn - dir) - 1);
-                              } else
-                                 jo_next (j);
-                           }
-                           jo_skip (j);
-                           if (status != STATUS_ERROR && !*fn)
-                           {
-                              status = STATUS_ERROR;
-                              ESP_LOGE (TAG, "Missing filename");
-                           }
-                           if (status != STATUS_ERROR)
-                           {
-                              int f = open (dir, O_RDONLY);
-                              if (f < 0)
-                              {
-                                 status = STATUS_ERROR;
-                                 ESP_LOGE (TAG, "Missing file %s", dir);
-                              } else
-                              {
-                                 struct stat s = { 0 };
-                                 fstat (f, &s);
-                                 total += s.st_size;
-                                 close (f);
-                              }
-                           }
-                        }
-                     }
                   }
                   if (status != STATUS_ERROR)
-                  {             // Flash
-                     ESP_LOGE (TAG, "Flash %u bytes", total);
-                     uint32_t bytes = 0;
-                     jo_rewind (j);
-                     if (jo_here (j) == JO_OBJECT)
-                        jo_find (j, "manifest");
-                     while (jo_next (j) == JO_OBJECT && status != STATUS_ERROR)
-                     {
-                        uint32_t address = 0;
-                        *fn = 0;
-                        while (jo_next (j) == JO_TAG)
-                        {
-                           if (!jo_strcmp (j, "file"))
-                           {
-                              if (jo_next (j) == JO_STRING)
-                                 jo_strncpy (j, fn, sizeof (dir) - (fn - dir) - 1);
-                           } else if (!jo_strcmp (j, "address"))
-                           {
-                              jo_type_t t = jo_next (j);
-                              if (t == JO_STRING)
-                              {
-                                 char temp[10];
-                                 jo_strncpy (j, temp, sizeof (temp));
-                                 address = strtoul (temp, NULL, 16);
-                              } else if (t == JO_NUMBER)
-                                 address = jo_read_int (j);
-                           } else
-                              jo_next (j);
-                        }
-                        int f = open (dir, O_RDONLY);
-                        if (f >= 0)
-                        {
-                           struct stat s = { 0 };
-                           fstat (f, &s);
-                           ESP_LOGE (TAG, "Flash %s to 0x%lX size %u", dir, address, s.st_size);
-                           e = esp_loader_flash_start (address, s.st_size, BLOCK);
-                           if (!e)
-                           {
-                              uint32_t p = 0;
-                              while (p < s.st_size)
-                              {
-                                 set_led (bytes * 100 / total, 'K', 'B');
-                                 uint32_t s = read (f, block, BLOCK);
-                                 e = esp_loader_flash_write (block, s);
-                                 if (e)
-                                 {
-                                    ESP_LOGE (TAG, "Flash fail");
-                                    status = STATUS_ERROR;
-                                    break;
-                                 }
-                                 p += s;
-                                 bytes += s;
-                              }
-                           }
-                           e = esp_loader_flash_finish (false);
-                           close (f);
-                        }
-                     }
-                     // TODO verify
+                     chip_info ();
+                  if (status != STATUS_ERROR && !flashsize)
+                  {
+                     ESP_LOGE (TAG, "Failed to get chip info");
+                     status = STATUS_ERROR;
                   }
-                  // TODO log file
-                  jo_free (&j);
-                  free (manifestjson);
+                  if (status != STATUS_ERROR && jo_find (j, "chip") == JO_STRING && jo_strcmp (j, chip))
+                  {
+                     status = STATUS_ERROR;
+                     char *c = jo_strdup (j);
+                     ESP_LOGE (TAG, "Wrong chip %s expecting %s", chip, c);
+                     free (c);
+                     b.fileerror = 1;
+                  }
+                  if ((b.forceerase || b.erase) && status != STATUS_EMPTY && status != STATUS_ERROR && do_erase ())
+                  {
+                     status = STATUS_ERROR;
+                     ESP_LOGE (TAG, "Erase failed");
+                  }
+                  if (status != STATUS_ERROR && do_flash ())
+                  {
+                     status = STATUS_ERROR;
+                     ESP_LOGE (TAG, "Flash failed");
+                  }
                }
-
                if (b.connected && !b.reload)
                {
                   ESP_LOGE (TAG, "Reset");
                   esp_loader_reset_target ();
                   status = target_status ();
                }
+               switch (status)
+               {
+               case STATUS_PASS:
+                  set_led (100, 'K', 'G');
+                  break;
+               case STATUS_FAIL:
+                  set_led (100, 'K', 'R');
+                  break;
+               case STATUS_TIMEOUT:
+                  set_led (50, 'R', 'G');
+                  break;
+               case STATUS_LOOPING:
+                  set_led (90, 'K', 'R');
+                  break;
+               case STATUS_SILENT:
+                  set_led (80, 'K', 'R');
+                  break;
+               case STATUS_EMPTY:
+                  set_led (70, 'K', 'R');
+                  break;
+               default:
+                  set_led (manifest * 10, 'R', 'R');
+               }
+               if (b.connected && !b.reload)
+               {
+                  ESP_LOGE (TAG, "Wait disconnect");
+                  while (b.connected && !b.reload)
+                     usleep (100000);
+               }
             }
-            switch (status)
-            {
-            case STATUS_PASS:
-               set_led (100, 'K', 'G');
-               break;
-            case STATUS_FAIL:
-               set_led (100, 'K', 'R');
-               break;
-            case STATUS_TIMEOUT:
-               set_led (50, 'R', 'G');
-               break;
-            case STATUS_LOOPING:
-               set_led (90, 'K', 'R');
-               break;
-            case STATUS_SILENT:
-               set_led (80, 'K', 'R');
-               break;
-            case STATUS_EMPTY:
-               set_led (70, 'K', 'R');
-               break;
-            default:
-               set_led (manifest * 10, 'R', 'R');
-            }
-            if (b.connected && !b.reload)
-            {
-               ESP_LOGE (TAG, "Wait disconnect");
-               while (b.connected && !b.reload)
-                  usleep (100000);
-            }
+            close_manifest ();
             loader_port_esp32_usb_cdc_acm_deinit ();
          }
-      }
-      ESP_LOGE (TAG, "Power off");
-      if (b.connected)
-         usb_host_lib_set_root_port_power (false);
-      revk_gpio_output (pwr5, 0);
+         set_led (0, 'K', 'K');
+         ESP_LOGE (TAG, "Power off");
+         if (b.connected)
+            usb_host_lib_set_root_port_power (false);
+         revk_gpio_output (pwr5, 0);
+      } else
+         sleep (1);
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
       ledsd = 'B';
@@ -641,6 +708,7 @@ app_main ()
       if (revk_shutting_down (NULL))
          break;
    }
+
    usb_host_uninstall ();
 
    while (revk_shutting_down (NULL))
@@ -650,4 +718,37 @@ app_main ()
          set_led (p, 'K', 'Y');
       usleep (100000);
    }
+}
+
+//--------------------------------------------------------------------------------
+// Main
+void
+app_main ()
+{
+   ESP_LOGE (TAG, "Started");
+   revk_boot (&mqtt_client_callback);
+   revk_start ();
+   revk_gpio_output (pwr3, 0);
+   revk_gpio_output (pwr5, 0);
+   {                            // LED
+      led_strip_config_t strip_config = {
+         .strip_gpio_num = led.num,
+         .max_leds = 11,
+         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
+         .led_model = LED_MODEL_WS2812, // LED strip model
+         .flags.invert_out = led.invert,
+      };
+      led_strip_rmt_config_t rmt_config = {
+         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
+         .resolution_hz = 10 * 1000 * 1000,     // 10 MHz
+      };
+#ifdef	CONFIG_IDF_TARGET_ESP32S3
+      rmt_config.flags.with_dma = true;
+#endif
+      REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
+      revk_task ("led", led_task, NULL, 4);
+   }
+   revk_gpio_input (btn);
+   revk_task ("btn", btn_task, NULL, 4);
+   revk_task ("flash", flash_task, NULL, 16);
 }

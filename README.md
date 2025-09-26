@@ -72,7 +72,6 @@ A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% o
 |🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢|ATE passed|
 |🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
 |🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴|ATE failed, may show fewer red LEDs depending on failure|
-|⚪⚪⚪⚪⚪...🔵🔵🔵🔵🔵|Verifying flashed device|
 |⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device|
 |🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade or SD file upload in progress|
 
@@ -90,7 +89,6 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |`"chip"`|The chip type (see below)|
 |`"erase"`|If `true` then a full erase is done first regardless of state of target device|
 |`"flash"`|An array of files to flash - see below|
-|`"verify"`|If `true` then a verify is done after flashing|
 |`"url"`|The URL for this manifest file|
 
 The `"flash"` array is objects with the following...
