@@ -52,55 +52,58 @@ Failure modes
  
 ## LEDs
 
-An LED by the SD card shows green for SD card, yellow for no SD card, red for SD card not mounted. As above red/green flashing means SD card does not contain necessary code for device.
+An LED by the SD card shows...
+
+|Colour|Meaning|
+|------|-------|
+|🔵|Card not mounted, waiting (e.g. during firmware upgrade)|
+|🟡|Card not inserted|
+|🟢|Card inserted, OK|
+|🔴|Card did not mount (flashing if file error)|
 
 A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% of progress.
 
 |Colour|Meaning|
 |------|-------|
-|Off|Waiting for device|
-|Single orange|USB connected, checking|
-|Off to blue|Flashing device|
-|All green|ATE passed|
-|Half red/green|Code seems to be running but no ATE status|
-|All or some red|ATE failed|
-|Blue to cyan|Verifying flashed device|
-|Blue to off|Erasing device|
-|Off to yellow|Flasher s/w upgrade or SD file upload in progress|
+|🟣|Waiting for device - which LED is which manifest is selected|
+|🟠|USB connected, checking|
+|🔴|File error - or wrong chip detected for selected manifest|
+|🔵🔵🔵🔵🔵...⚫⚫⚫⚫⚫|Flashing device|
+|🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢|ATE passed|
+|🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
+|🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴|ATE failed, may show fewer red LEDs depending on failure|
+|⚪⚪⚪⚪⚪...🔵🔵🔵🔵🔵|Verifying flashed device|
+|⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device|
+|🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade or SD file upload in progress|
 
 ## Button
 
-The button *may* have uses, proposed as follows...
-
-1. When no target device, cycles an LED in the row of 10 LEDs to select s/w to use from SD card for next flash.
+1. When no target device, cycles an LED in the row of 10 LEDs to select s/w to use from SD card for next flash. Note this only cycles for manifests that are present on SD card.
 2. When target device connected (pass or fail or even flashing), starts a full flash erase and program cycle.
 
 ## SD card file format
 
-The card format expects a directory for each device type. This consists of device type and version, if `MC` (multicore), ROM and RAM size. It may have `PICO` or similar before ROM size if known. **At present basic type and flash size are supported for all, and for ESP32S3 also PSRAM size, more to be added. Check serial logs for details of what it finds.**
-
-E.g. `ESP32S3MCN4R2` would be an ESP32-S3 multi-core with 4M flash and 2M SPI RAM
-
-The directory needs to contain a file `manifest.json` which is a JSON file with an object that is `"manifest"` which is an array of objects...
+The card contains files to flash, and manifest files. The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `log.txt` as this may be used for logging at some point.1
 
 |Field|Meaning|
 |-----|-------|
-|`"file"`|The file name, in this directory.|
-|`"address"`|The address to flash, either a number or a string - a string is assumed to be HEX, default 0 (for bootloader).|
-|`"url"`|A URL for refreshing the file, ideally `http://` to save memory.|
+|`"chip"`|The chip type (see below)|
+|`"erase"`|If `true` then a full erase is done first regardless of state of target device|
+|`"flash"`|An array of files to flash - see below|
+|`"verify"`|If `true` then a verify is done after flashing|
+|`"url"`|The URL for this manifest file|
 
-For example...
+The `"flash"` array is objects with the following...
 
-```
-{
- "manifest":[
-  {"file":"MyApp-S3-MINI-N4-R2-bootloader.bin"},
-  {"file":"partition-table.bin","address":"8000"},
-  {"file":"ota_data_initial.bin","address":"D000"},
-  {"file":"MyApp-S3-MINI-N4-R2.bin","address":"10000","url":"http://ota.revk.uk/MyApp-S3-MINI-N4-R2.bin"}
- ]
-}
-```
+|Field|Meaning|
+|-----|-------|
+|`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
+|`"filename"`|The filename on the SD card|
+|`"url"`|The URL for this file|
+
+The `"url"` allows a file to be checked for update, using `If-Modified-Since", and replaced. This can be `http://` or `https://` (expected Let's Encrypt cert for https).
+
+The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` if known, flash `Nx`, and PSRAM `Rx`, e.g. `ESP32S3MCN4R2`. This has to match the device, else a file errro is shown. See serial log for the identified chip type. This works for chip type and flash size for all, and addition info (like PSRAM) for some chips (currently ESP32S3).
 
 ## Target code
 
