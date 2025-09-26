@@ -30,7 +30,8 @@ struct
 } volatile b;
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
-   ledt = 'K';                  // LED from/to
+   ledt = 'K',
+   ledsd = 'B';                 // LED from/to and SD
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -75,6 +76,7 @@ led_task (void *arg)
                                  gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],  //
                                  gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
+         revk_led (strip, 10, 255, revk_rgb (ledsd));
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
       }
@@ -254,7 +256,6 @@ app_main ()
       rmt_config.flags.with_dma = true;
 #endif
       REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
-      revk_led (strip, 10, 255, revk_rgb ('B'));
       revk_task ("led", led_task, NULL, 4);
    }
    revk_gpio_input (btn);
@@ -285,7 +286,7 @@ app_main ()
          e = cdc_acm_host_install (NULL);
       if (e)
       {
-         revk_led (strip, 10, 255, revk_rgb ('R'));
+         ledsd = 'R';
          ESP_LOGE (TAG, "USB init failed %s", esp_err_to_name (e));
          jo_t j = jo_object_alloc ();
          jo_string (j, "error", esp_err_to_name (e));
@@ -297,7 +298,7 @@ app_main ()
    // Main loop
    while (!b.die)
    {
-      revk_led (strip, 10, 255, revk_rgb ('Y'));
+      ledsd = 'Y';
       ESP_LOGI (TAG, "Waiting SD");
       // Wait for SD card
       while (!revk_gpio_get (sdcd))
@@ -313,7 +314,7 @@ app_main ()
       e = esp_vfs_fat_sdmmc_mount (sd_dir, &host, &slot, &mount_config, &card);
       if (e != ESP_OK)
       {
-         revk_led (strip, 10, 255, revk_rgb ('R'));
+         ledsd = 'R';
          ESP_LOGE (TAG, "SD mount failed %s", esp_err_to_name (e));
          jo_t j = jo_object_alloc ();
          if (e == ESP_FAIL)
@@ -327,7 +328,7 @@ app_main ()
          continue;
       }
       ESP_LOGI (TAG, "Mounted SD");
-      revk_led (strip, 10, 255, revk_rgb ('G'));
+      ledsd = 'G';
 
       // TODO how do we do serial via UART?
 
@@ -531,7 +532,7 @@ app_main ()
                            close (f);
                         }
                      }
-		     // TODO verify
+                     // TODO verify
                   }
                   // TODO log file
                   jo_free (&j);
@@ -583,6 +584,7 @@ app_main ()
       revk_gpio_output (pwr5, 0);
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
+      ledsd = 'B';
       if (revk_shutting_down (NULL))
          break;
    }
