@@ -378,8 +378,6 @@ upgrade_check (int f, char *filename, char *url)
 {
    if (revk_link_down () || !filename || !url || f < 0 || b.checked)
       return;
-   set_led (100, 'K', 'Y');
-   b.fileerror = 1;
    esp_http_client_config_t config = {
       .url = url,
       .timeout_ms = 30000,
@@ -418,6 +416,8 @@ upgrade_check (int f, char *filename, char *url)
       int len = 0;
       if (status / 100 == 2)
       {
+         set_led (100, 'K', 'Y');
+         b.fileerror = 1;
          int o = open (dl, O_CREAT | O_TRUNC | O_WRONLY, 0777);
          if (o < 0)
          {
