@@ -91,7 +91,7 @@ led_task (void *arg)
                                     gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
          if (b.fileerror && !(tick & 1))
-            revk_led (strip, 10, 255, 'R');
+            revk_led (strip, 10, 255, revk_rgb ('R'));
          else
             revk_led (strip, 10, 255, revk_rgb (ledsd));
          REVK_ERR_CHECK (led_strip_refresh (strip));
@@ -137,7 +137,7 @@ btn_task (void *arg)
                   if (m == 10)
                      m = 0;
                }
-               while (manifests & (1 << m));
+               while (!(manifests & (1 << m)));
                if (m != manifest)
                {
                   jo_t j = jo_object_alloc ();
@@ -419,6 +419,8 @@ load_manifest (void)
    scan_manifest (load_cb);
    if (manifestsize == -1)
       return "Missing files";
+   if (!manifestsize)
+      return "No files to flash";
    return NULL;
 }
 
@@ -524,13 +526,16 @@ flash_task (void *arg)
    }
    revk_task ("usb-lib", usb_lib_task, NULL, 4);
    // Main loop
-   while (!b.die)
+   while (!b.die && !revk_shutting_down (NULL))
    {
       ledsd = 'Y';
       ESP_LOGI (TAG, "Waiting SD");
       // Wait for SD card
       while (!revk_gpio_get (sdcd))
+      {
          usleep (100000);
+         continue;
+      }
       ESP_LOGI (TAG, "Mounting SD");
       // Mount SD card
       esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -567,13 +572,13 @@ flash_task (void *arg)
             if (!access (fn, R_OK))
                manifests |= (1 << i);
          }
-         ESP_LOGE (TAG, "Manifests %X", manifests);
       }
       {                         // Manifest
          const char *e = load_manifest ();
          if (e)
          {
             ESP_LOGE (TAG, "Manifest fail: %s", e);
+            set_led (manifest * 10, 'M', 'M');
             b.fileerror = 1;
          } else
             b.fileerror = 0;
@@ -705,8 +710,6 @@ flash_task (void *arg)
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
       ledsd = 'B';
       b.reload = 0;
-      if (revk_shutting_down (NULL))
-         break;
    }
 
    usb_host_uninstall ();
