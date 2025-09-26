@@ -40,14 +40,16 @@ The basic operation is as follows...
 1. Connect power to flasher (USB-C)
 2. Ensure SD card inserted (LED shows green)
 3. Connect to target device
-4. Row of LEDs progress blue to show flashing progress
-5. Row of LEDs go all green as ATE test pass
-6. Target device may also indicate green LED depending on target code
+4. Single orange LED for a moment while checking device
+5. Row of LEDs progress blue to show flashing progress (unless already flashed and passed tests)
+6. Row of LEDs go all green as ATE test pass
+7. Target device may also indicate green LED depending on target code
+8. Stays green until device removed and ready for next device
 
 Failure modes
 
-1. Nothing happens when connecting to target device (this indicates serious issue with target device)
-2. SD card flashes red/green - this means no code present to flash target device - check device type and code on SD card
+1. Nothing happens when connecting to target device (this indicates serious issue with target device) - not that common for *nothing* to happen
+2. Single red LED indicating issue connecting to device (or wrong device type if flashing)
 3. After blue LED sequence all LEDs show red (this indicates device flashed but failed ATE)
  
 ## LEDs
@@ -61,23 +63,24 @@ An LED by the SD card shows...
 |🟢|Card inserted, OK|
 |🔴|Card did not mount (flashing if file error)|
 
-A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% of progress.
+A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% to 100% of progress.
 
 |Colour|Meaning|
 |------|-------|
 |🟣|Waiting for device - which LED is which manifest is selected|
 |🟠|USB connected, checking|
 |🔴|Bad USB connection, or flashing for file issue such as wrong chip|
-|🔵🔵🔵🔵🔵...⚫⚫⚫⚫⚫|Flashing device|
+|🔵🔵🔵🔵🔵...⚫⚫⚫⚫⚫|Flashing device progress|
 |🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢|ATE passed|
 |🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
 |🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴|ATE failed, may show fewer red LEDs depending on failure|
-|⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device|
+|⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device progress|
 |🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade or SD file upload in progress|
+|🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡|All flashing - this is target firmware upgrade checks in progress, wait a moment|
 
 ## Button
 
-1. When no target device, cycles an LED in the row of 10 LEDs to select s/w to use from SD card for next flash. Note this only cycles for manifests that are present on SD card.
+1. When no target device, cycles an LED in the row of 10 LEDs to select s/w to use from SD card for next flash. Note this only cycles for manifests that are present on SD card, so no action if only one manifest.
 2. When target device connected (pass or fail or even flashing), starts a full flash erase and program cycle.
 
 ## SD card file format
@@ -87,7 +90,7 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |Field|Meaning|
 |-----|-------|
 |`"chip"`|The chip type (see below)|
-|`"erase"`|If `true` then a full erase is done first regardless of state of target device|
+|`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
 
@@ -99,13 +102,13 @@ The `"flash"` array is objects with the following...
 |`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
 
-The `"url"` allows a file to be checked for update, using `If-Modified-Since", and replaced. This can be `http://` or `https://` (expected Let's Encrypt cert for https).
+The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https).
 
-The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` if known, flash `Nx`, and PSRAM `Rx`, e.g. `ESP32S3MCN4R2`. This has to match the device, else a file errro is shown. See serial log for the identified chip type. This works for chip type and flash size for all, and addition info (like PSRAM) for some chips (currently ESP32S3).
+The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` if known, flash `Nx`, and PSRAM `Rx`, e.g. `ESP32S3MCN4R2`. This has to match the device, else a file error is shown. See serial log for the identified chip type. This works for chip type and flash size for all, and addition info (like PSRAM) for some chips (currently ESP32S3).
 
 ## Target code
 
-Target code should output a line of text on the serial consule within five seconds of starting that is either... 
+Target code should output a line of text on the serial console within five seconds of starting that is either... 
 
 `ATE: PASS`
 
@@ -113,8 +116,4 @@ or
 
 `ATE: FAIL`
 
-A failure to send either will indicate fail.
-
-I may allow more options, perhaps number of LEDs to indicate type of failure.
-
-This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) the logs have colour codes.
+This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) it has a prefix, and (c) the logs have colour codes.
