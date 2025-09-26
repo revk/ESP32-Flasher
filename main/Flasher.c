@@ -13,8 +13,9 @@ static const char TAG[] = "Flasher";
 #include <driver/sdmmc_host.h>
 #include <sdmmc_cmd.h>
 #include "esp_http_client.h"
-#include <esp_http_server.h>
+#ifdef  CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 #include "esp_crt_bundle.h"
+#endif
 #include "esp_vfs_fat.h"
 #include <sys/dirent.h>
 #include "usb/usb_host.h"
@@ -31,6 +32,7 @@ struct
    uint8_t erase:1;             // Manifest says erase
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
+   uint8_t checked:1;           // Upgrade checked
 } volatile b;
 uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
@@ -146,6 +148,7 @@ btn_task (void *arg)
                   jo_int (j, "manifest", m);
                   revk_setting (j);
                   jo_free (&j);
+                  b.checked = 0;
                   b.reload = 1;
                }
             }
@@ -371,12 +374,98 @@ scan_manifest (manifest_t cb)
 }
 
 void
+upgrade_check (int f, char *filename, char *url)
+{
+   if (revk_link_down () || !filename || !url || f < 0 || b.checked)
+      return;
+   set_led (100, 'K', 'Y');
+   b.fileerror = 1;
+   esp_http_client_config_t config = {
+      .url = url,
+      .timeout_ms = 30000,
+   };
+#ifdef  CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+   config.crt_bundle_attach = esp_crt_bundle_attach;
+#else
+   config.use_global_ca_store = true;   /* Global cert */
+#endif
+   esp_http_client_handle_t client = esp_http_client_init (&config);
+   if (!client)
+      return;
+   char *dl = NULL;
+   asprintf (&dl, "%s/DOWNLOAD", sd_dir);
+   char *fn = NULL;
+   asprintf (&fn, "%s/%s", sd_dir, filename);
+   esp_err_t e = 0;
+   struct stat s = { 0 };
+   char *h = NULL;
+   if (!stat (fn, &s))
+   {
+      struct tm t;
+      gmtime_r (&s.st_mtime, &t);
+      asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT", "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
+                "JanFebMarAprMayJunJulAugSepOctNovDec" + t.tm_mon * 3, t.tm_year + 1900, t.tm_hour, t.tm_min, t.tm_sec);
+      if (!e)
+         e = esp_http_client_set_header (client, "If-Modified-Since", h);
+   }
+   ESP_LOGE (TAG, "Upgrade check %s %s %s", filename, url, h ? : "");
+   if (!e)
+      e = esp_http_client_open (client, 0);
+   if (!e)
+   {
+      esp_http_client_fetch_headers (client);
+      int status = esp_http_client_get_status_code (client);
+      int len = 0;
+      if (status / 100 == 2)
+      {
+         int o = open (dl, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+         if (o < 0)
+         {
+            ESP_LOGE (TAG, "Cannot write %s", dl);
+            esp_http_client_flush_response (client, &len);
+         } else
+         {
+            uint32_t size = 0;
+            while (1)
+            {
+               len = esp_http_client_read_response (client, (void *) block, sizeof (block));
+               if (len <= 0)
+                  break;
+               write (o, block, len);
+               size += len;
+            }
+            close (o);
+            if ((e = unlink (fn)))
+               ESP_LOGE (TAG, "Unlink fail %s %s", fn, esp_err_to_name (e));
+            if ((e = rename (dl, fn)))
+               ESP_LOGE (TAG, "Rename fail %s %s %s", dl, fn, esp_err_to_name (e));
+            if (!e)
+               ESP_LOGE (TAG, "Upgraded %s %u", filename, size);
+         }
+      } else
+      {
+         if (status != 304)
+            ESP_LOGE (TAG, "Status %d %s", status, url);
+         esp_http_client_flush_response (client, &len);
+      }
+   }
+   if (e)
+      ESP_LOGE (TAG, "Failed %s: %s", url, esp_err_to_name (e));
+   free (h);
+   free (dl);
+   free (fn);
+   esp_http_client_cleanup (client);
+}
+
+
+void
 load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
 {
    if (!size)
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
+   upgrade_check (f, filename, url);
 }
 
 const char *
@@ -423,11 +512,19 @@ load_manifest (void)
       free (fn);
       return "Bad JSON";
    }
+   b.erase = (jo_find (j, "erase") == JO_TRUE);
+   if (jo_find (j, "url") == JO_STRING)
+   {
+      char *url = jo_strdup (j);
+      upgrade_check (f, fn + sizeof (sd_dir), url);
+      free (url);
+   }
    close (f);
    free (fn);
-   b.erase = (jo_find (j, "erase") == JO_TRUE);
    manifestsize = 0;
    scan_manifest (load_cb);
+   if (!revk_link_down ())
+      b.checked = 1;
    if (manifestsize == -1)
       return "Missing files";
    if (!manifestsize)
@@ -706,7 +803,7 @@ flash_task (void *arg)
                if (b.connected && !b.reload)
                {
                   ESP_LOGE (TAG, "Wait disconnect");
-                  while (b.connected && !b.reload)
+                  while (revk_gpio_get (sdcd) && b.connected && !b.reload)
                      usleep (100000);
                }
             }
@@ -728,6 +825,7 @@ flash_task (void *arg)
 
    usb_host_uninstall ();
 
+   b.fileerror = 0;
    while (revk_shutting_down (NULL))
    {
       int p = revk_ota_progress ();
