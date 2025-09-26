@@ -75,7 +75,7 @@ A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% t
 |🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
 |🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴|ATE failed, may show fewer red LEDs depending on failure|
 |⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device progress|
-|🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade or SD file upload in progress|
+|🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade progress|
 |🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡|All flashing - this is target firmware upgrade checks in progress, wait a moment|
 
 ## Button
