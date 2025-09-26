@@ -26,13 +26,21 @@ struct
 {
    uint8_t die:1;               // Shutdown
    uint8_t wifi:1;              // WiFi connected
+   uint8_t reload:1;            // Re load manifest, etc
+   uint8_t forceerase:1;        // Force erase
+   uint8_t erase:1;             // Manifest says erase
+   uint8_t verify:1;            // Manifest says verify
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
 } volatile b;
+uint16_t maifests = 0;          // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
    ledt = 'K',
    ledsd = 'B';                 // LED from/to and SD
+uint8_t mac[6]={0};		// Found mac
+char chip[30]={0};		// Found chip type
+uint32_t flashsize=0;	// Found flash size
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -114,7 +122,20 @@ btn_task (void *arg)
    {
       while (!b.die)
       {
-         // TODO check button
+         if (revk_gpio_get (btn))
+         {
+            if (b.connected)
+            {
+               b.forceerase = 1;
+               b.reload = 1;
+            } else
+            {                   // TODO select manifest
+
+            }
+            while (revk_gpio_get (btn))
+               usleep (100000);
+            continue;
+         }
          usleep (100000);
       }
    }
@@ -142,8 +163,15 @@ host_error_cb (void)
 void
 device_disconnect_cb (void)
 {
-   ESP_LOGE (TAG, "Host disconnect");
+   ESP_LOGE (TAG, "Device disconnect");
    b.connected = 0;
+}
+
+void
+device_connect_cb (usb_device_handle_t usb_dev)
+{
+   ESP_LOGE (TAG, "Device connect");
+   b.connected = 1;
 }
 
 enum
@@ -290,9 +318,15 @@ app_main ()
          .skip_phy_setup = false,
          .intr_flags = ESP_INTR_FLAG_LEVEL1,
       };
+      cdc_acm_host_driver_config_t usb_config = {
+         .driver_task_priority = 10,
+         .driver_task_stack_size = 4096,
+         .xCoreID = 0,
+         .new_dev_cb = device_connect_cb,
+      };
       e = usb_host_install (&host_config);
       if (!e)
-         e = cdc_acm_host_install (NULL);
+         e = cdc_acm_host_install (&usb_config);
       if (e)
       {
          ledsd = 'R';
@@ -344,16 +378,21 @@ app_main ()
       ESP_LOGE (TAG, "Power on");
       revk_gpio_output (pwr5, 1);       // device on
       usb_host_lib_set_root_port_power (true);
-      while (revk_gpio_get (sdcd) && !b.die)
+      while (revk_gpio_get (sdcd) && !b.die && !b.reload)
       {
-         set_led (0, 'K', 'K');
+         set_led (manifest * 10, 'M', 'M');
          if (b.wifi)
          {
             b.wifi = 0;
             revk_command ("upgrade", NULL);
+            b.reload = 1;
+            continue;
          }
-         if (revk_shutting_down (NULL))
-            break;
+         if (!b.connected)
+         {
+            usleep (100000);
+            continue;
+         }
          loader_esp32_usb_cdc_acm_config_t config = {
             .acm_host_error_callback = host_error_cb,
             .device_disconnected_callback = device_disconnect_cb,
@@ -363,12 +402,16 @@ app_main ()
             //.acm_host_serial_state_callback = host_serial_cb,
          };
          esp_loader_error_t e = loader_port_esp32_usb_cdc_acm_init (&config);
+         if (e)
+         {                      // try non JTAG
+            config.device_pid = 0;
+            e = loader_port_esp32_usb_cdc_acm_init (&config);
+         }
          if (!e)
          {
-            set_led (10, 'K', 'O');
-            b.connected = 1;
+            set_led (manifest * 10, 'O', 'O');
             uint8_t status = target_status ();
-            if (b.connected && (flashalways || status != STATUS_PASS) && status != STATUS_ERROR)
+            if (b.connected && (b.forceerase || b.erase || status != STATUS_PASS) && status != STATUS_ERROR)
             {
                ESP_LOGE (TAG, "Bootload");
                esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
@@ -376,8 +419,7 @@ app_main ()
                if (!e)
                {
                   char dir[200] = "";   // For dir and file names
-                  uint32_t size = chip_id (dir);
-                  uint8_t mac[6] = { 0 };
+                  flashsize = chip_id (dir);
                   if (b.connected && !esp_loader_read_mac (mac))
                      ESP_LOGE (TAG, "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                   ESP_LOGE (TAG, "Dir %s", dir);
@@ -417,13 +459,14 @@ app_main ()
                      }
                      close (f);
                   }
-                  if (flasherase && status != STATUS_EMPTY && status != STATUS_ERROR)
+                  if ((b.forceerase || b.erase) && status != STATUS_EMPTY && status != STATUS_ERROR)
                   {             // Full erase
+                     b.forceerase = 0;
                      ESP_LOGE (TAG, "Erase whole flash");
                      uint32_t p = 0;
-                     while (p < size)
+                     while (p < flashsize && !b.reload)
                      {
-                        set_led (p * 100 / size, 'B', 'K');
+                        set_led (p * 100 / flashsize, 'B', 'K');
                         e = esp_loader_flash_erase_region (p, BLOCK);
                         if (e)
                         {
@@ -548,7 +591,7 @@ app_main ()
                   free (manifestjson);
                }
 
-               if (b.connected)
+               if (b.connected && !b.reload)
                {
                   ESP_LOGE (TAG, "Reset");
                   esp_loader_reset_target ();
@@ -576,12 +619,12 @@ app_main ()
                set_led (70, 'K', 'R');
                break;
             default:
-               set_led (10, 'K', 'R');
+               set_led (manifest * 10, 'R', 'R');
             }
-            if (b.connected)
+            if (b.connected && !b.reload)
             {
                ESP_LOGE (TAG, "Wait disconnect");
-               while (b.connected)
+               while (b.connected && !b.reload)
                   usleep (100000);
             }
             loader_port_esp32_usb_cdc_acm_deinit ();
@@ -594,6 +637,7 @@ app_main ()
       ESP_LOGI (TAG, "Dismounting SD");
       esp_vfs_fat_sdcard_unmount (sd_dir, card);
       ledsd = 'B';
+      b.reload = 0;
       if (revk_shutting_down (NULL))
          break;
    }
