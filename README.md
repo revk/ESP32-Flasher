@@ -67,7 +67,7 @@ A row of 10 LEDs indicates progress, liging/changing one LED at a time for 10% o
 |------|-------|
 |🟣|Waiting for device - which LED is which manifest is selected|
 |🟠|USB connected, checking|
-|🔴|File error - or wrong chip detected for selected manifest|
+|🔴|Bad USB connection, or flashing for file issue such as wrong chip|
 |🔵🔵🔵🔵🔵...⚫⚫⚫⚫⚫|Flashing device|
 |🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢|ATE passed|
 |🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
