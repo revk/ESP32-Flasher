@@ -604,7 +604,7 @@ flash_task (void *arg)
          while (revk_gpio_get (sdcd) && !b.die && !b.reload && !revk_shutting_down (NULL))
          {
             b.fileerror = 0;
-            if (badusb && badusb < uptime () && badusb + 2 > uptime ())
+            if (badusb && badusb + 2 > uptime ())
                set_led (manifest * 10, 'R', 'R');       // Likely diff device
             else
                set_led (manifest * 10, 'M', 'M');
