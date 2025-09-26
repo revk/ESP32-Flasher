@@ -31,7 +31,7 @@ For serial this is slightly non standard as tag-connect has `DTR` on 2 and `RTS`
 
 Note also that the board is desigend to provide 5V (USB incoming pass through) or 3.3V to the power output so it can be used with devices needing either voltage.
 
-**Note that at present serial and use of serial USB chip is not supported because of some library limitations**
+**Note that at present direct serial is not supported (due to flasher library)**
 
 ## Basic operation
 
