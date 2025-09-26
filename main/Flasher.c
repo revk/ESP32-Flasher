@@ -641,6 +641,7 @@ flash_task (void *arg)
       // Wait for SD card
       while (!revk_gpio_get (sdcd))
       {
+         b.checked = 0;
          usleep (100000);
          continue;
       }
@@ -803,7 +804,7 @@ flash_task (void *arg)
                if (b.connected && !b.reload)
                {
                   ESP_LOGE (TAG, "Wait disconnect");
-                  while (revk_gpio_get (sdcd) && b.connected && !b.reload)
+                  while (revk_gpio_get (sdcd) && b.connected && !b.reload && !revk_shutting_down (NULL))
                      usleep (100000);
                }
             }
