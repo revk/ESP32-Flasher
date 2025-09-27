@@ -91,6 +91,7 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |-----|-------|
 |`"chip"`|The chip type (see below)|
 |`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
+|`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
 

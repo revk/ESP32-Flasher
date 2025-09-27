@@ -30,6 +30,7 @@ struct
    uint8_t reload:1;            // Re load manifest, etc
    uint8_t forceerase:1;        // Force erase
    uint8_t erase:1;             // Manifest says erase
+   uint8_t nobtn:1;             // Disable button erase
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
    uint8_t checked:1;           // Upgrade checked
@@ -130,8 +131,11 @@ btn_task (void *arg)
          {
             if (b.connected)
             {
-               b.forceerase = 1;
-               b.reload = 1;
+               if (!b.nobtn)
+               {
+                  b.forceerase = 1;
+                  b.reload = 1;
+               }
             } else if (manifests)
             {
                uint8_t m = manifest;
@@ -516,6 +520,7 @@ load_manifest (void)
       return "Bad JSON";
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
+   b.nobtn = !(jo_find (j, "button") == JO_FALSE);
    if (jo_find (j, "url") == JO_STRING)
    {
       char *url = jo_strdup (j);
