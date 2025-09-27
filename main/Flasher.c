@@ -81,6 +81,8 @@ led_task (void *arg)
          uint32_t f = revk_rgb (ledf);
          uint32_t t = revk_rgb (ledt);
          uint8_t p = progress;
+         if (f != t && p < 5)
+            p = 5;              // don't do all off
          for (int i = 0; i < 10; i++)
          {
             uint8_t l = p;
