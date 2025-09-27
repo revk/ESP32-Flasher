@@ -708,6 +708,7 @@ flash_task (void *arg)
       }
       ESP_LOGI (TAG, "Mounted SD");
       ledsd = 'G';
+      b.fileerror = 0;
       set_led (manifest * 10, 'Y', 'Y');
 
       {                         // Check manifests
@@ -727,8 +728,7 @@ flash_task (void *arg)
             ESP_LOGE (TAG, "Manifest fail: %s", e);
             set_led (manifest * 10, 'R', 'R');
             b.fileerror = 1;
-         } else
-            b.fileerror = 0;
+         }
       }
 
       if (!b.fileerror)
