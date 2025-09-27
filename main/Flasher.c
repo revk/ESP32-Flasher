@@ -376,7 +376,7 @@ scan_manifest (manifest_t cb)
 void
 upgrade_check (int f, char *filename, char *url)
 {
-   if (revk_link_down () || !filename || !url || f < 0 || b.checked)
+   if (revk_link_down () || !filename || !url || b.checked)
       return;
    esp_http_client_config_t config = {
       .url = url,
@@ -440,7 +440,10 @@ upgrade_check (int f, char *filename, char *url)
             if ((e = rename (dl, fn)))
                ESP_LOGE (TAG, "Rename fail %s %s %s", dl, fn, esp_err_to_name (e));
             if (!e)
+            {
                ESP_LOGE (TAG, "Upgraded %s %u", filename, size);
+               b.reload = 1;
+            }
          }
       } else
       {
@@ -523,7 +526,7 @@ load_manifest (void)
    free (fn);
    manifestsize = 0;
    scan_manifest (load_cb);
-   if (!revk_link_down ())
+   if (!b.reload && !revk_link_down ())
       b.checked = 1;
    if (manifestsize == -1)
       return "Missing files";
@@ -671,7 +674,7 @@ flash_task (void *arg)
       }
       ESP_LOGI (TAG, "Mounted SD");
       ledsd = 'G';
-      set_led (manifest * 10, 'M', 'M');
+      set_led (manifest * 10, 'Y', 'Y');
 
       {                         // Check manifests
          manifests = 0;
