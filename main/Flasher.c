@@ -520,7 +520,7 @@ load_manifest (void)
       return "Bad JSON";
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
-   b.nobtn = !(jo_find (j, "button") == JO_FALSE);
+   b.nobtn = (jo_find (j, "button") == JO_FALSE);
    if (jo_find (j, "url") == JO_STRING)
    {
       char *url = jo_strdup (j);
