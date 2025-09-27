@@ -377,23 +377,29 @@ scan_manifest (manifest_t cb)
    }
 }
 
+esp_http_client_handle_t client = NULL;
+
 void
 upgrade_check (int f, char *filename, char *url)
 {
-   if (revk_link_down () || !filename || !url || b.checked)
+   if (!filename || !url)
       return;
-   esp_http_client_config_t config = {
-      .url = url,
-      .timeout_ms = 30000,
-   };
-#ifdef  CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-   config.crt_bundle_attach = esp_crt_bundle_attach;
-#else
-   config.use_global_ca_store = true;   /* Global cert */
-#endif
-   esp_http_client_handle_t client = esp_http_client_init (&config);
    if (!client)
-      return;
+   {
+      esp_http_client_config_t config = {
+         .url = url,
+         .timeout_ms = 30000,
+      };
+#ifdef  CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+      config.crt_bundle_attach = esp_crt_bundle_attach;
+#else
+      config.use_global_ca_store = true;        /* Global cert */
+#endif
+      client = esp_http_client_init (&config);
+      if (!client)
+         return;
+   } else
+      esp_http_client_set_url (client, url);
    char *dl = NULL;
    asprintf (&dl, "%s/DOWNLOAD", sd_dir);
    char *fn = NULL;
@@ -461,9 +467,18 @@ upgrade_check (int f, char *filename, char *url)
    free (h);
    free (dl);
    free (fn);
-   esp_http_client_cleanup (client);
 }
 
+
+void
+upgrade_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+{
+   if (!size)
+      manifestsize = -1;
+   else if (manifestsize != 1)
+      manifestsize += size;
+   upgrade_check (f, filename, url);
+}
 
 void
 load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
@@ -472,7 +487,6 @@ load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
-   upgrade_check (f, filename, url);
 }
 
 const char *
@@ -521,18 +535,31 @@ load_manifest (void)
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
-   if (jo_find (j, "url") == JO_STRING)
+   if (!b.checked && !revk_link_down () && time (0) > 1000000000)
+   {                            // Can check for new files
+      if (jo_find (j, "url") == JO_STRING)
+      {
+         char *url = jo_strdup (j);
+         upgrade_check (f, fn + sizeof (sd_dir), url);
+         free (url);
+      }
+      close (f);
+      free (fn);
+      manifestsize = 0;
+      scan_manifest (upgrade_cb);
+      if (client)
+      {
+         esp_http_client_cleanup (client);
+         client = NULL;
+      }
+      if (!b.reload)
+         b.checked = 1;
+   } else
    {
-      char *url = jo_strdup (j);
-      upgrade_check (f, fn + sizeof (sd_dir), url);
-      free (url);
+      close (f);
+      free (fn);
+      scan_manifest (load_cb);
    }
-   close (f);
-   free (fn);
-   manifestsize = 0;
-   scan_manifest (load_cb);
-   if (!b.reload && !revk_link_down ())
-      b.checked = 1;
    if (manifestsize == -1)
       return "Missing files";
    if (!manifestsize)
@@ -715,8 +742,9 @@ flash_task (void *arg)
                set_led (manifest * 10, 'R', 'R');       // Likely diff device
             else
                set_led (manifest * 10, 'M', 'M');
-            if (b.wifi)
+            if (b.wifi && time (0) > 1000000000)
             {
+               ESP_LOGE (TAG, "Online");
                b.wifi = 0;
                revk_command ("upgrade", NULL);
                b.reload = 1;
