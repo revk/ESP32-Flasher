@@ -407,18 +407,16 @@ upgrade_check (int f, char *filename, char *url)
    char *fn = NULL;
    asprintf (&fn, "%s/%s", sd_dir, filename);
    esp_err_t e = 0;
-   struct stat s = { 0 };
    char *h = NULL;
-   if (!stat (fn, &s))
+   struct stat s = { 0 };
+   if (!stat (fn, &s) && s.st_mtime)
    {
       struct tm t;
       gmtime_r (&s.st_mtime, &t);
       asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT", "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
                 "JanFebMarAprMayJunJulAugSepOctNovDec" + t.tm_mon * 3, t.tm_year + 1900, t.tm_hour, t.tm_min, t.tm_sec);
-      if (!e)
-         e = esp_http_client_set_header (client, "If-Modified-Since", h);
+      e = esp_http_client_set_header (client, "If-Modified-Since", h);
    }
-   ESP_LOGE (TAG, "Upgrade check %s %s %s", filename, url, h ? : "");
    if (!e)
       e = esp_http_client_open (client, 0);
    if (!e)
@@ -432,10 +430,8 @@ upgrade_check (int f, char *filename, char *url)
          b.fileerror = 1;
          int o = open (dl, O_CREAT | O_TRUNC | O_WRONLY, 0777);
          if (o < 0)
-         {
             ESP_LOGE (TAG, "Cannot write %s", dl);
-            esp_http_client_flush_response (client, &len);
-         } else
+         else
          {
             uint32_t size = 0;
             while (1)
@@ -447,10 +443,10 @@ upgrade_check (int f, char *filename, char *url)
                size += len;
             }
             close (o);
-            if ((e = unlink (fn)))
-               ESP_LOGE (TAG, "Unlink fail %s %s", fn, esp_err_to_name (e));
-            if ((e = rename (dl, fn)))
-               ESP_LOGE (TAG, "Rename fail %s %s %s", dl, fn, esp_err_to_name (e));
+            if (!e)
+               unlink (fn);     // fails is not there, duh
+            if (!e && (e = rename (dl, fn)))
+               ESP_LOGE (TAG, "Rename fail %s", fn);
             if (!e)
             {
                ESP_LOGE (TAG, "Upgraded %s %u", filename, size);
@@ -461,11 +457,15 @@ upgrade_check (int f, char *filename, char *url)
       {
          if (status != 304)
             ESP_LOGE (TAG, "Status %d %s", status, url);
-         esp_http_client_flush_response (client, &len);
+         else
+            ESP_LOGE (TAG, "Unchanged %s %s", h ? : "",filename);
       }
+      esp_http_client_flush_response (client, &len);
    }
    if (e)
       ESP_LOGE (TAG, "Failed %s: %s", url, esp_err_to_name (e));
+   if (h)
+      esp_http_client_delete_header (client, "If-Modified-Since");
    free (h);
    free (dl);
    free (fn);
