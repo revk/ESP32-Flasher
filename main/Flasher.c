@@ -458,7 +458,7 @@ upgrade_check (int f, char *filename, char *url)
          if (status != 304)
             ESP_LOGE (TAG, "Status %d %s", status, url);
          else
-            ESP_LOGE (TAG, "Unchanged %s %s", h ? : "",filename);
+            ESP_LOGE (TAG, "Unchanged %s %s (%u)", h ? : "", filename, s.st_size);
       }
       esp_http_client_flush_response (client, &len);
    }
@@ -610,7 +610,10 @@ flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
          flashcount += s;
       }
    }
-   flashe = esp_loader_flash_finish (false);
+   if (flashe)
+      ESP_LOGE (TAG, "Cannot flash %05X len %05X %s %s", address, size, filename, esp_err_to_name (flashe));
+   if (!flashe)
+      flashe = esp_loader_flash_finish (false);
    if (!flashe)
       flashe = esp_loader_flash_verify ();
 }
@@ -774,7 +777,9 @@ flash_task (void *arg)
             if (!e)
             {                   // Connected
                set_led (manifest * 10, 'O', 'O');
-               uint8_t status = target_status ();
+               uint8_t status = STATUS_TIMEOUT;
+               if (!b.forceerase && !b.erase)
+                  status = target_status ();
                if (b.connected && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL))
                    && status != STATUS_ERROR)
                {
