@@ -592,7 +592,7 @@ esp_loader_error_t flashe = 0;
 void
 flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
 {
-   ESP_LOGE (TAG, "Flash to %05X len %05X %s", address, size, filename);
+   ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
    if (flashe || f < 0 || !size)
       return;
    flashe = esp_loader_flash_start (address, size, BLOCK);
@@ -611,7 +611,7 @@ flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
       }
    }
    if (flashe)
-      ESP_LOGE (TAG, "Cannot flash %05X len %05X %s %s", address, size, filename, esp_err_to_name (flashe));
+      ESP_LOGE (TAG, "Cannot flash %06X len %06X %s %s", address, size, filename, esp_err_to_name (flashe));
    if (!flashe)
       flashe = esp_loader_flash_finish (false);
    if (!flashe)
