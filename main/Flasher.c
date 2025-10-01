@@ -22,6 +22,7 @@ static const char TAG[] = "Flasher";
 #include "usb/cdc_acm_host.h"
 #include "esp_loader.h"
 #include "esp32_usb_cdc_acm_port.h"
+#include <math.h>
 
 struct
 {
@@ -29,8 +30,10 @@ struct
    uint8_t wifi:1;              // WiFi connected
    uint8_t reload:1;            // Re load manifest, etc
    uint8_t forceerase:1;        // Force erase
+   uint8_t voltage3v3:1;        // 3.3V not 5V
    uint8_t erase:1;             // Manifest says erase
    uint8_t nobtn:1;             // Disable button erase
+   uint8_t nocheck:1;           // Disable check
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
    uint8_t checked:1;           // Upgrade checked
@@ -537,6 +540,16 @@ load_manifest (void)
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
+   b.nocheck = (jo_find (j, "check") == JO_FALSE);
+   b.voltage3v3 = 0;
+   if (jo_find (j, "voltage") == JO_NUMBER)
+   {
+      int v = round (1000 * jo_read_float (j));
+      if (v == 3300)
+         b.voltage3v3 = 1;
+      else if (v != 5000)
+         b.fileerror = 1;
+   }
    if (!b.checked && !revk_link_down () && time (0) > 1000000000)
    {                            // Can check for new files
       if (jo_find (j, "url") == JO_STRING)
@@ -737,8 +750,8 @@ flash_task (void *arg)
       if (!b.fileerror)
       {
          // TODO how do we do serial via UART?
-         ESP_LOGE (TAG, "Power on");
-         revk_gpio_output (pwr5, 1);    // device on
+         ESP_LOGE (TAG, "Power on %s", b.voltage3v3 ? "3.3V" : "5V");
+         revk_gpio_output (b.voltage3v3 ? pwr3 : pwr5, 1);      // device on
          usb_host_lib_set_root_port_power (true);
          while (revk_gpio_get (sdcd) && !b.die && !b.reload && !revk_shutting_down (NULL))
          {
@@ -778,7 +791,7 @@ flash_task (void *arg)
             {                   // Connected
                set_led (manifest * 10, 'O', 'O');
                uint8_t status = STATUS_TIMEOUT;
-               if (!b.forceerase && !b.erase)
+               if (!b.forceerase && !b.erase && !b.nocheck)
                   status = target_status ();
                if (b.connected && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL))
                    && status != STATUS_ERROR)
@@ -860,6 +873,7 @@ flash_task (void *arg)
          ESP_LOGE (TAG, "Power off");
          if (b.connected)
             usb_host_lib_set_root_port_power (false);
+         revk_gpio_output (pwr3, 0);
          revk_gpio_output (pwr5, 0);
       } else
          sleep (1);

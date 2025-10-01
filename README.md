@@ -90,7 +90,9 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |Field|Meaning|
 |-----|-------|
 |`"chip"`|The chip type (see below)|
+|`"voltage"`|Either `3.3` or `5` (default `5`)||
 |`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
+|`"check"`|If `false` then goes direct to flashing without checking first|
 |`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
