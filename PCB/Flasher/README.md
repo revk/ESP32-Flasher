@@ -9,19 +9,20 @@ This is an open source project, but bear in mind you cannot sell boards bearing 
 These files are for use with [KiCAD](https://www.kicad.org).
 
 - [Flasher](Flasher.kicad_pro)
+
 ## 3D
 
 3D case designs are normally automatically created from the PCB so as to ensure correct details and placement of apertures, etc.
 
 |Design|Bottom|Top|
 |------|------|---|
-|Flasher|[FlasherB](FlasherB.stl)|[FlasherT](FlasherT.stl)|
+|Flasher|<a href='FlasherB.stl'><img src='FlasherB.png' size=15%></a>|<a href='FlasherT.stl'><img src='FlasherT.png' size=15%></a>|
 
-## Images
+## PCB Images
 
 <img src='Flasher.png' width=32%><img src='Flasher-90.png' width=32%><img src='Flasher-bottom.png' width=32%>
 <img src='Flasher-panel.png' width=49%><img src='Flasher-panel-bottom.png' width=49%>
 
 ---
 
-*Auto generated README.md 2025-09-24T13:12:16*
+*Auto generated README.md 2025-10-01T17:31:19*
