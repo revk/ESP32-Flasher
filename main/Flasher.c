@@ -50,6 +50,12 @@ uint32_t badusb = 0;            // Last devices 0 even
 
 uint32_t flashsize = 0;         // Found flash size
 
+char *manifestjson = NULL;      // Loaded manifest JSON
+uint32_t manifestsize = 0;      // Total flash bytes
+jo_t j = NULL;                  // Parsed manifest JSON
+char *manifestid = NULL;        // ID check
+char *manifestsetting = NULL;   // Manifest setting object
+
 #define	BLOCK	4096
 uint8_t block[BLOCK];
 
@@ -247,12 +253,50 @@ enum
       p = 0;
       if (!strcmp (buf, "invalid header: 0xffffffff"))
          return STATUS_EMPTY;
-      if (!strcmp (buf, "ATE: PASS"))
-         return STATUS_PASS;
-      if (!strcmp (buf, "ATE: FAIL"))
-         return STATUS_FAIL;
       if (!strncmp (buf, "Build:", 6) && rst++ > 4)
          return STATUS_LOOPING;
+      while (buf[p] >= 'A' && buf[p] <= 'Z')
+         p++;
+      if (buf[p] == ':')
+      {
+         printf ("%s\n", buf);
+         buf[p++] = 0;
+         while (buf[p] == ' ')
+            p++;
+         if (!strcmp (buf, "ATE"))
+         {
+            if (!strcmp (buf + p, "PASS"))
+               return STATUS_PASS;
+            if (!strcmp (buf + p, "FAIL"))
+               return STATUS_FAIL;
+         } else if (!strcmp (buf, "ID"))
+         {
+            // TODO check ID
+            if (manifestsetting)
+            {
+               ESP_LOGE (TAG, "Setting %s", manifestsetting);
+#if 1
+               loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 1000);
+#else
+               char *p = manifestsetting,
+                  *e = p + strlen (p);
+               while (p < e)
+               {
+                  int l = e - p;
+                  if (l > 256)
+                     l = 256;
+                  if (loader_port_write ((uint8_t *) p, l, 1000))
+                  {
+                     ESP_LOGE (TAG, "Wait");
+                     continue;
+                  }
+                  p += l;
+               }
+#endif
+            }
+         }
+      }
+      p = 0;
    }
    if (!rst)
       return STATUS_SILENT;
@@ -303,10 +347,6 @@ chip_info (void)
    if (b.connected && !esp_loader_read_mac (mac))
       ESP_LOGE (TAG, "Chip %02X:%02X:%02X:%02X:%02X:%02X %s", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], chip);
 }
-
-char *manifestjson = NULL;      // Loaded manifest JSON
-uint32_t manifestsize = 0;      // Total flash bytes
-jo_t j = NULL;                  // Parsed manifest JSON
 
 void
 close_manifest (void)
@@ -537,6 +577,22 @@ load_manifest (void)
       manifestjson = NULL;
       free (fn);
       return "Bad JSON";
+   }
+   free (manifestid);
+   manifestid = NULL;
+   if (jo_find (j, "id") == JO_STRING)
+      manifestid = jo_strdup (j);
+   free (manifestsetting);
+   manifestsetting = NULL;
+   if (jo_find (j, "setting"))
+   {
+      jo_t m = jo_create_alloc ();
+      jo_json (m, NULL, j);
+      manifestsetting = jo_finisha (&m);
+      if (manifestsetting)
+         for (char *p = manifestsetting; *p; p++)
+            if (*p < ' ')
+               *p = ' ';
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
