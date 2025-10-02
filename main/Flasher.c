@@ -571,9 +571,22 @@ load_manifest (void)
    if (jo_find (j, "setting"))
    {
       int p = jo_pos (j);
-      jo_skip (j);
       manifestsetting = manifestjson + p;
-      manifestsettinglen = jo_pos (j) - p;
+      if (p >= 0)
+      {
+         jo_skip (j);
+         int q = jo_pos (j);
+         if (q >= 0)
+         {
+            while (q && manifestsetting[q - 1] <= ' ')
+               q--;             // Messy
+            if (q && manifestsetting[q - 1] == ',')
+               q--;
+            while (q && manifestsetting[q - 1] <= ' ')
+               q--;             // Messy
+            manifestsettinglen = q - p;
+         }
+      }
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
