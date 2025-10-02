@@ -55,6 +55,7 @@ uint32_t manifestsize = 0;      // Total flash bytes
 jo_t j = NULL;                  // Parsed manifest JSON
 char *manifestid = NULL;        // ID check
 char *manifestsetting = NULL;   // Manifest setting object
+uint32_t manifestsettinglen = 0;        // Len
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -274,25 +275,8 @@ enum
             // TODO check ID
             if (manifestsetting)
             {
-               ESP_LOGE (TAG, "Setting %s", manifestsetting);
-#if 1
-               loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 1000);
-#else
-               char *p = manifestsetting,
-                  *e = p + strlen (p);
-               while (p < e)
-               {
-                  int l = e - p;
-                  if (l > 256)
-                     l = 256;
-                  if (loader_port_write ((uint8_t *) p, l, 1000))
-                  {
-                     ESP_LOGE (TAG, "Wait");
-                     continue;
-                  }
-                  p += l;
-               }
-#endif
+               ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
+               loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 1000);
             }
          }
       }
@@ -582,17 +566,14 @@ load_manifest (void)
    manifestid = NULL;
    if (jo_find (j, "id") == JO_STRING)
       manifestid = jo_strdup (j);
-   free (manifestsetting);
    manifestsetting = NULL;
+   manifestsettinglen = 0;
    if (jo_find (j, "setting"))
    {
-      jo_t m = jo_create_alloc ();
-      jo_json (m, NULL, j);
-      manifestsetting = jo_finisha (&m);
-      if (manifestsetting)
-         for (char *p = manifestsetting; *p; p++)
-            if (*p < ' ')
-               *p = ' ';
+      int p = jo_pos (j);
+      jo_skip (j);
+      manifestsetting = manifestjson + p;
+      manifestsettinglen = jo_pos (j) - p;
    }
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
@@ -657,7 +638,6 @@ do_erase (void)
 
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
-
 void
 flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
 {
@@ -782,7 +762,6 @@ flash_task (void *arg)
       ledsd = 'G';
       b.fileerror = 0;
       set_led (manifest * 10, 'Y', 'Y');
-
       {                         // Check manifests
          manifests = 0;
          for (int i = 0; i < 10; i++)
@@ -940,7 +919,6 @@ flash_task (void *arg)
    }
 
    usb_host_uninstall ();
-
    b.fileerror = 0;
    while (revk_shutting_down (NULL))
    {
