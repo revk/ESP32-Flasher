@@ -273,7 +273,7 @@ enum
          } else if (!strcmp (buf, "ID"))
          {
             // TODO check ID
-            if (manifestsetting)
+            if (manifestsettinglen)
             {
                ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
                loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 1000);
@@ -571,18 +571,18 @@ load_manifest (void)
    if (jo_find (j, "setting"))
    {
       int p = jo_pos (j);
-      manifestsetting = manifestjson + p;
       if (p >= 0)
       {
+         manifestsetting = manifestjson + p;
          jo_skip (j);
          int q = jo_pos (j);
-         if (q >= 0)
+         if (q > p)
          {
-            while (q && manifestsetting[q - 1] <= ' ')
+            while (q > p && manifestjson[q - 1] <= ' ')
                q--;             // Messy
-            if (q && manifestsetting[q - 1] == ',')
+            if (q > p && manifestjson[q - 1] == ',')
                q--;
-            while (q && manifestsetting[q - 1] <= ' ')
+            while (q > p && manifestjson[q - 1] <= ' ')
                q--;             // Messy
             manifestsettinglen = q - p;
          }
