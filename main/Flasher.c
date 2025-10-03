@@ -396,7 +396,7 @@ scan_manifest (manifest_t cb)
             {
                if (jo_next (j) == JO_STRING)
                   url = jo_strdup (j);
-            } else if (!jo_strcmp (j, "build") && !build)
+            } else if (!jo_strcmp (j, "build") && build < 0)
             {
                jo_type_t t = jo_next (j);
                if (t == JO_NUMBER)
@@ -541,20 +541,27 @@ load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
-   if(build>=0)
-   { // ID check info
-	   if(lseek(f,build,SEEK_SET)==build)
-	   {
-		   const esp_app_desc_t app;
-		   if(read(f,app,sizeof(app))==sizeof(app))
-		   {
-			   ESP_LOGE(TAG,"App %.32s",app->project_name);
-			   ESP_LOGE(TAG,"Version %.32s",app->version);
-			   ESP_LOGE(TAG,"Date %.16s",app->date);
-			   ESP_LOGE(TAG,"Time %.16s",app->time);
-			   // TODO
-		   }
-	   }
+   if (build >= 0 && f >= 0)
+   {                            // ID check info
+      ESP_LOGE (TAG, "Build %d", build);
+      if (lseek (f, build, SEEK_SET) == build)
+      {
+         esp_app_desc_t app;
+         if (read (f, &app, sizeof (app)) == sizeof (app))
+         {
+		 if(!manifestid)manifestid=strndup(app.project_name,32);
+		 if(!manifestversion)manifestversion=strndup(app.version,32);
+		 if(!manifestbuild)
+		 {
+			 char temp[20];
+		 }
+            ESP_LOGE (TAG, "App %.32s", app.project_name);
+            ESP_LOGE (TAG, "Version %.32s", app.version);
+            ESP_LOGE (TAG, "Date %.16s", app.date);
+            ESP_LOGE (TAG, "Time %.16s", app.time);
+            // TODO
+         }
+      }
    }
 }
 
