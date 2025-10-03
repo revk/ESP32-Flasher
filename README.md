@@ -104,7 +104,7 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
-|`"id"`|The first part expected for `ID:` sent from target|
+|`"id"`|The first part expected for `ID:` sent from target (can use `"build"` in one file to set this)|
 |`"version"`|The second part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
 |`"build"`|The third part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
 |`"setting"`|A object to be sent to the target after `ID:` is seen. target should reply `OK:` if accepted, or `ERR:` if not, or reboot (first time) if needed to apply settings.|
