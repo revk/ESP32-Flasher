@@ -548,7 +548,11 @@ load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t
 		   const esp_app_desc_t app;
 		   if(read(f,app,sizeof(app))==sizeof(app))
 		   {
-
+			   ESP_LOGE(TAG,"App %.32s",app->project_name);
+			   ESP_LOGE(TAG,"Version %.32s",app->version);
+			   ESP_LOGE(TAG,"Date %.16s",app->date);
+			   ESP_LOGE(TAG,"Time %.16s",app->time);
+			   // TODO
 		   }
 	   }
    }
