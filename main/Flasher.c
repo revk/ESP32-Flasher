@@ -37,6 +37,7 @@ struct
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
    uint8_t checked:1;           // Upgrade checked
+   uint8_t manifestidprefix:1;  // Manifest ID is prefix
 } volatile b;
 uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
@@ -229,6 +230,7 @@ enum
    STATUS_LOOPING,              // Starting multiple times
    STATUS_FAIL,                 // ATE: FAIL
    STATUS_PASS,                 // ATE: PASS
+   STATUS_MISMATCH,             // Code needs flashing as version mismatch
    STATUS_TIMEOUT,              // Not looping but not pass/fail
 } target_status (void)
 {
@@ -237,6 +239,7 @@ enum
    uint8_t p = 0;
    uint8_t rst = 0;
    int8_t ate = 0;
+   int8_t match = 0;
    char ok = !manifestsetting;
    while (uptime () <= to)
    {
@@ -290,8 +293,39 @@ enum
             if (rst++ > 5)
                return STATUS_LOOPING;
             to = uptime () + 5;
-            // TODO check ID
-            if (manifestsettinglen)
+            char *id = buf + p;
+            while (buf[p] > ' ')
+               p++;
+            while (buf[p] && buf[p] <= ' ')
+               buf[p++] = 0;
+            char *version = buf + p;
+            while (buf[p] > ' ')
+               p++;
+            while (buf[p] && buf[p] <= ' ')
+               buf[p++] = 0;
+            char *build = buf + p;
+            while (buf[p] > ' ')
+               p++;
+            while (buf[p] && buf[p] <= ' ')
+               buf[p++] = 0;
+            if (manifestid && b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid))
+            {
+               ESP_LOGE (TAG, "ID mismatch [%s]/[%s]", id, manifestid);
+               return STATUS_ERROR;
+            }
+            if (!match && manifestversion && strcmp (version, manifestversion))
+            {
+               match = -1;
+               ESP_LOGE (TAG, "Version mismatch [%s]/[%s]", version, manifestversion);
+            }
+            if (!match && manifestbuild && strcmp (build, manifestbuild))
+            {
+               match = -1;
+               ESP_LOGE (TAG, "Build mismatch [%s]/[%s]", build, manifestbuild);
+            }
+            if (!match && (manifestversion || manifestbuild))
+               match = 1;
+            if (match >= 0 && manifestsettinglen)
             {
                ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
                loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 2000);
@@ -306,6 +340,8 @@ enum
       }
       p = 0;
    }
+   if (match < 0)
+      return STATUS_MISMATCH;
    if (!rst)
       return STATUS_SILENT;
    if (ate > 0)
@@ -318,8 +354,8 @@ enum
 void
 chip_info (void)
 {                               // Get chip info
-   const char *const chips[] =
-      { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2", "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
+   const char *const chips[] = { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2",
+      "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
       "ESP_UNKNOWN"
    };
    char *c = chip;
@@ -371,7 +407,6 @@ close_manifest (void)
 }
 
 typedef void manifest_t (char *filename, char *url, int build, int f, uint32_t address, uint32_t size);
-
 void
 scan_manifest (manifest_t cb)
 {
@@ -443,7 +478,6 @@ scan_manifest (manifest_t cb)
 }
 
 esp_http_client_handle_t client = NULL;
-
 void
 upgrade_check (int f, char *filename, char *url)
 {
@@ -476,7 +510,8 @@ upgrade_check (int f, char *filename, char *url)
    {
       struct tm t;
       gmtime_r (&s.st_mtime, &t);
-      asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT", "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
+      asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT",
+                "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
                 "JanFebMarAprMayJunJulAugSepOctNovDec" + t.tm_mon * 3, t.tm_year + 1900, t.tm_hour, t.tm_min, t.tm_sec);
       e = esp_http_client_set_header (client, "If-Modified-Since", h);
    }
@@ -549,17 +584,19 @@ load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t
          esp_app_desc_t app;
          if (read (f, &app, sizeof (app)) == sizeof (app))
          {
-		 if(!manifestid)manifestid=strndup(app.project_name,32);
-		 if(!manifestversion)manifestversion=strndup(app.version,32);
-		 if(!manifestbuild)
-		 {
-			 char temp[20];
-		 }
-            ESP_LOGE (TAG, "App %.32s", app.project_name);
-            ESP_LOGE (TAG, "Version %.32s", app.version);
-            ESP_LOGE (TAG, "Date %.16s", app.date);
-            ESP_LOGE (TAG, "Time %.16s", app.time);
-            // TODO
+            if (!manifestid)
+            {
+               manifestid = strndup (app.project_name, 32);
+               b.manifestidprefix = 1;
+            }
+            if (!manifestversion)
+               manifestversion = strndup (app.version, 32);
+            if (!manifestbuild)
+            {
+               char temp[20];
+               if (revk_build_date_app (&app, temp))
+                  manifestbuild = strdup (temp);
+            }
          }
       }
    }
@@ -617,6 +654,7 @@ load_manifest (void)
       return "Bad JSON";
    }
    free (manifestid);
+   b.manifestidprefix = 0;
    manifestid = NULL;
    if (jo_find (j, "id") == JO_STRING)
       manifestid = jo_strdup (j);
@@ -901,8 +939,8 @@ flash_task (void *arg)
                uint8_t status = STATUS_TIMEOUT;
                if (!b.forceerase && !b.erase && !b.nocheck)
                   status = target_status ();
-               if (b.connected && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL))
-                   && status != STATUS_ERROR)
+               if (b.connected
+                   && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL)) && status != STATUS_ERROR)
                {
                   ESP_LOGE (TAG, "Bootload");
                   esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
@@ -946,6 +984,9 @@ flash_task (void *arg)
                }
                switch (status)
                {
+               case STATUS_MISMATCH:
+                  set_led (10, 'K', 'Y');
+                  break;
                case STATUS_PASS:
                   set_led (100, 'K', 'G');
                   break;
