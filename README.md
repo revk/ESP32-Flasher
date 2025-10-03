@@ -41,16 +41,16 @@ The basic operation is as follows...
 2. Ensure SD card inserted (LED shows green)
 3. Connect to target device
 4. Single orange LED for a moment while checking device
-5. Row of LEDs progress blue to show flashing progress (unless already flashed and passed tests)
+5. Row of LEDs progress blue to show flashing progress (unless already flashed)
 6. Row of LEDs go all green as ATE test pass
-7. Target device may also indicate green LED depending on target code
-8. Stays green until device removed and ready for next device
+7. Stays green until device removed and ready for next device
 
 Failure modes
 
 1. Nothing happens when connecting to target device (this indicates serious issue with target device) - not that common for *nothing* to happen
 2. Single red LED indicating issue connecting to device (or wrong device type if flashing)
-3. After blue LED sequence all LEDs show red (this indicates device flashed but failed ATE)
+3. Either immediately (if already flashed), or after blue LED sequence, all LEDs show red (this indicates device flashed but failed ATE)
+4. Stays red until device removed and ready for next device
  
 ## LEDs
 
@@ -63,13 +63,13 @@ An LED by the SD card shows...
 |🟢|Card inserted, OK|
 |🔴|Card did not mount (flashing if file error)|
 
-A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% to 100% of progress.
+A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% to 100% of progress. The first three show one LED which is one of the 10, indicating which manifest `0` to `9` is selected. Later design has a pattern of LEDs to show the number `0` to `9`. those shown with ... are moving from one colour to the other to show progress.
 
 |Colour|Meaning|
 |------|-------|
-|🟣|Waiting for device - which LED is which manifest is selected|
+|🟣|Waiting for device|
 |🟠|USB connected, checking|
-|🔴|Bad USB connection, or flashing for file issue such as wrong chip|
+|🔴|Bad USB connection, or flashing, or file issue such as wrong chip|
 |🔵🔵🔵🔵🔵...⚫⚫⚫⚫⚫|Flashing device progress|
 |🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢|ATE passed|
 |🔴🔴🔴🔴🔴🟢🟢🟢🟢🟢|Code seems to be running but no ATE status|
@@ -77,6 +77,10 @@ A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% t
 |⚫⚫⚫⚫⚫...🔵🔵🔵🔵🔵|Erasing device progress|
 |🟡🟡🟡🟡🟡...⚫⚫⚫⚫⚫|Flasher s/w upgrade progress|
 |🟡🟡🟡🟡🟡🟡🟡🟡🟡🟡|All flashing - this is target firmware upgrade checks in progress, wait a moment|
+
+## Updates
+
+If the flasher is on-line it will check for s/w update, and upgrade, and also check for updates to manifest and files.
 
 ## Button
 
@@ -99,6 +103,7 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |`"id"`|The first part expected for `ID:` sent from target|
 |`"version"`|The second part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
 |`"build"`|The third part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
+|`"setting"`|A object to be sent to the target after `ID:` is seen. target should reply `OK:` if accepted, or `ERR:` if not, or reboot (first time) if needed to apply settings.|
 
 The `"flash"` array is objects with the following...
 
@@ -107,9 +112,9 @@ The `"flash"` array is objects with the following...
 |`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
 |`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
-|`"build"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level|
+|`"build"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
 
-The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https).
+The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https). It is faster if all files are on the same host, especially if using `https://`.
 
 The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` if known, flash `Nx`, and PSRAM `Rx`, e.g. `ESP32S3MCN4R2`. This has to match the device, else a file error is shown. See serial log for the identified chip type. This works for chip type and flash size for all, and addition info (like PSRAM) for some chips (currently ESP32S3).
 
@@ -130,3 +135,4 @@ The `ATE:` messages are the only ones required.
 If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"build"` is in the file, then the *appname* has to match the start of what is sent in `ID:`.
 If `ID:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail.
 
+On receipt of `ID:` any object in `"setting"` is sent to the target so settings can be applied. An `OK:` or `ERR:` response is expected but the target may reboot (first time) if needed to apply the new settings.

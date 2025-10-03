@@ -993,9 +993,6 @@ flash_task (void *arg)
                case STATUS_FAIL:
                   set_led (100, 'K', 'R');
                   break;
-               case STATUS_TIMEOUT:
-                  set_led (50, 'R', 'G');
-                  break;
                case STATUS_LOOPING:
                   set_led (90, 'K', 'R');
                   break;
@@ -1004,6 +1001,13 @@ flash_task (void *arg)
                   break;
                case STATUS_EMPTY:
                   set_led (70, 'K', 'R');
+                  break;
+               case STATUS_ERROR:
+                  b.fileerror = 1;
+                  set_led (60, 'K', 'R');
+                  break;
+               case STATUS_TIMEOUT:
+                  set_led (50, 'R', 'G');
                   break;
                default:
                   set_led (manifest * 10, 'R', 'R');
