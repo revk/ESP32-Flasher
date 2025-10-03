@@ -93,7 +93,7 @@ The card contains files to flash, and manifest files.
 
 ### Manifest files
 
-The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interally.
+The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used internally.
 
 |Field|Meaning|
 |-----|-------|
