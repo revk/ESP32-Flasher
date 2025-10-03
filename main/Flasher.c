@@ -271,21 +271,21 @@ enum
             p++;
          if (!strcmp (buf, "SPIWP"))
          {
-            ok = 0;
+            ok = !manifestsetting;
             if (rst++ > 5)
                return STATUS_LOOPING;
          } else if (!strcmp (buf, "ATE"))
          {
             if (!strcmp (buf + p, "PASS"))
             {
+               ate = 1;
                if (ok)
                   break;
-               ate = 1;
             } else if (!strcmp (buf + p, "FAIL"))
             {
+               ate = -1;
                if (ok)
                   break;
-               ate = -1;
             }
          } else if (!strcmp (buf, "ID"))
          {
@@ -543,8 +543,8 @@ upgrade_check (int f, char *filename, char *url)
             }
             close (o);
             if (!e)
-               unlink (fn);     // fails is not there, duh
-            if (!e && (e = rename (dl, fn)))
+               unlink (fn);     // fails if not there, duh
+            if (!e && (e = rename (dl, fn)))    // Fails if target there, duh
                ESP_LOGE (TAG, "Rename fail %s", fn);
             if (!e)
             {
