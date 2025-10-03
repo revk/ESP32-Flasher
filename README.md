@@ -91,6 +91,8 @@ If the flasher is on-line it will check for s/w update, and upgrade, and also ch
 
 The card contains files to flash, and manifest files. The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interally.
 
+### Manifest files
+
 |Field|Meaning|
 |-----|-------|
 |`"chip"`|The chip type (see below)|
@@ -117,6 +119,39 @@ The `"flash"` array is objects with the following...
 The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https). It is faster if all files are on the same host, especially if using `https://`.
 
 The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` if known, flash `Nx`, and PSRAM `Rx`, e.g. `ESP32S3MCN4R2`. This has to match the device, else a file error is shown. See serial log for the identified chip type. This works for chip type and flash size for all, and addition info (like PSRAM) for some chips (currently ESP32S3).
+
+### Example manifest file
+
+```
+{
+  "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2-manifest.json",
+  "chip": "ESP32S3MCN4R2",
+  "id": "Faikin-S3-MINI-N4-R2",
+  "button": false,
+  "flash": [
+    {
+      "filename": "Faikin-S3-MINI-N4-R2-bootloader.bin",
+      "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2-bootloader.bin"
+    },
+    {
+      "filename": "Faikin-S3-MINI-N4-R2-partition-table.bin",
+      "address": "8000",
+      "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2-partition-table.bin"
+    },
+    {
+      "filename": "Faikin-S3-MINI-N4-R2-ota_data_initial.bin",
+      "address": "D000",
+      "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2-ota_data_initial.bin"
+    },
+    {
+      "filename": "Faikin-S3-MINI-N4-R2.bin",
+      "address": "10000",
+      "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2.bin",
+      "build": true
+    }
+  ]
+}
+```
 
 ## Target code
 
