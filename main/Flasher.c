@@ -407,7 +407,8 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *filename, char *url, int build, int f, uint32_t address, uint32_t size);
+typedef void manifest_t (char *filename, char *url, int app, int f, uint32_t address, uint32_t size);
+
 void
 scan_manifest (manifest_t cb)
 {
@@ -421,7 +422,7 @@ scan_manifest (manifest_t cb)
          uint32_t address = 0;
          char *filename = NULL;
          char *url = NULL;
-         int build = -1;
+         int app = -1;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -432,13 +433,13 @@ scan_manifest (manifest_t cb)
             {
                if (jo_next (j) == JO_STRING)
                   url = jo_strdup (j);
-            } else if (!jo_strcmp (j, "build") && build < 0)
+            } else if (!jo_strcmp (j, "app") && app < 0)
             {
                jo_type_t t = jo_next (j);
                if (t == JO_NUMBER)
-                  build = jo_read_int (j);
+                  app = jo_read_int (j);
                else if (t == JO_TRUE)
-                  build = 32;
+                  app = 32;
             } else if (!jo_strcmp (j, "address") && !url)
             {
                jo_type_t t = jo_next (j);
@@ -464,14 +465,14 @@ scan_manifest (manifest_t cb)
                   struct stat s = { 0 };
                   fstat (f, &s);
                   if (cb)
-                     cb (filename, url, build, f, address, s.st_size);
+                     cb (filename, url, app, f, address, s.st_size);
                   close (f);
                } else if (cb)
-                  cb (filename, url, build, -1, address, 0);
+                  cb (filename, url, app, -1, address, 0);
                free (fn);
             }
          } else if (cb)
-            cb (filename, url, build, -1, address, 0);
+            cb (filename, url, app, -1, address, 0);
          free (filename);
          free (url);
       }
@@ -571,15 +572,15 @@ upgrade_check (int f, char *filename, char *url)
 }
 
 void
-load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
+load_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
 {
    if (!size)
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
-   if (build >= 0 && f >= 0)
+   if (app >= 0 && f >= 0)
    {                            // ID check info
-      if (lseek (f, build, SEEK_SET) == build)
+      if (lseek (f, app, SEEK_SET) == app)
       {
          esp_app_desc_t app;
          if (read (f, &app, sizeof (app)) == sizeof (app))
@@ -603,9 +604,9 @@ load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t
 }
 
 void
-upgrade_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
+upgrade_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
 {
-   load_cb (filename, url, build, f, address, size);
+   load_cb (filename, url, app, f, address, size);
    upgrade_check (f, filename, url);
 }
 
@@ -750,7 +751,7 @@ do_erase (void)
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
 void
-flash_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
+flash_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
 {
    ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
    if (flashe || f < 0 || !size)

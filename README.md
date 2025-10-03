@@ -104,9 +104,9 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
-|`"id"`|The first part expected for `ID:` sent from target (can use `"build"` in one file to set this)|
-|`"version"`|The second part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
-|`"build"`|The third part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
+|`"id"`|The first part expected for `ID:` sent from target (can use `"app"` in one file to set this)|
+|`"version"`|The second part expected for `ID:` sent from target (normally use `"app"` in one file to set this)|
+|`"build"`|The third part expected for `ID:` sent from target (normally use `"app"` in one file to set this)|
 |`"setting"`|A object to be sent to the target after `ID:` is seen. target should reply `OK:` if accepted, or `ERR:` if not, or reboot (first time) if needed to apply settings.|
 
 The `"flash"` array is objects with the following...
@@ -116,9 +116,9 @@ The `"flash"` array is objects with the following...
 |`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
 |`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
-|`"build"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
+|`"app"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
 
-Note that `"build"` in the `"flash"` file expects an ESP/IDF 256 byte *app description* block at the specified offset in the file. The *app name* and *version* are strings from this, but the *build* time is taken from *date* and *time* fields and formatted as an ISO time, e.g. `2025-10-03T12:38:06`. As such the `ID:` value for this should be the same ISO date format (note, no `Z` or timezone suffix).
+Note that `"app"` in the `"flash"` file expects an ESP/IDF 256 byte *app description* block at the specified offset in the file. The *app name* and *version* are strings from this, but the *build* time is taken from *date* and *time* fields and formatted as an ISO time, e.g. `2025-10-03T12:38:06`. As such the `ID:` value for this should be the same ISO date format (note, no `Z` or timezone suffix).
 
 The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https). It is faster if all files are on the same host, especially if using `https://`.
 
@@ -151,7 +151,7 @@ The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` 
       "filename": "Faikin-S3-MINI-N4-R2.bin",
       "address": "10000",
       "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2.bin",
-      "build": true
+      "app": true
     }
   ]
 }
@@ -171,7 +171,7 @@ The target code is expected to provide simple text line output with information 
 
 The `ATE:` messages are the only ones required.
 
-If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"build"` is in the file, then the *appname* has to match the start of what is sent in `ID:`.
+If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"app"` is in the file, then the *appname* has to match the start of what is sent in `ID:`.
 If `ID:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail.
 
 On receipt of `ID:` any object in `"setting"` is sent to the target so settings can be applied. An `OK:` or `ERR:` response is expected but the target may reboot (first time) if needed to apply the new settings.
