@@ -166,7 +166,7 @@ The target code is expected to provide simple text line output with information 
 |`ID:`|Initial ID containing *appID*, *space*, *version*, *space*, *ISO build date*|
 |`ATE: PASS`|ATE tests passed|
 |`ATE: FAIL`|ATE tests failed|
-|`ERR:`|Error in settings|
+|`ERR:`|Error in settings (include error message)|
 |`OK:`|Settings accepted and stored|
 
 The `ATE:` messages are the only ones required.
