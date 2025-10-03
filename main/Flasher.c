@@ -578,7 +578,6 @@ load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t
       manifestsize += size;
    if (build >= 0 && f >= 0)
    {                            // ID check info
-      ESP_LOGE (TAG, "Build %d", build);
       if (lseek (f, build, SEEK_SET) == build)
       {
          esp_app_desc_t app;
