@@ -89,9 +89,11 @@ If the flasher is on-line it will check for s/w update, and upgrade, and also ch
 
 ## SD card file format
 
-The card contains files to flash, and manifest files. The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interally.
+The card contains files to flash, and manifest files.
 
 ### Manifest files
+
+The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interally.
 
 |Field|Meaning|
 |-----|-------|
