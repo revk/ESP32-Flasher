@@ -234,6 +234,8 @@ enum
    char buf[100];
    uint8_t p = 0;
    uint8_t rst = 0;
+   int8_t ate = 0;
+   char ok = !manifestsetting;
    while (uptime () <= to)
    {
       uint8_t c;
@@ -254,8 +256,6 @@ enum
       p = 0;
       if (!strcmp (buf, "invalid header: 0xffffffff"))
          return STATUS_EMPTY;
-      if (!strncmp (buf, "Build:", 6) && rst++ > 4)
-         return STATUS_LOOPING;
       while (buf[p] >= 'A' && buf[p] <= 'Z')
          p++;
       if (buf[p] == ':')
@@ -264,26 +264,52 @@ enum
          buf[p++] = 0;
          while (buf[p] == ' ')
             p++;
-         if (!strcmp (buf, "ATE"))
+         if (!strcmp (buf, "SPIWP"))
+         {
+            ok = 0;
+            if (rst++ > 5)
+               return STATUS_LOOPING;
+         } else if (!strcmp (buf, "ATE"))
          {
             if (!strcmp (buf + p, "PASS"))
-               return STATUS_PASS;
-            if (!strcmp (buf + p, "FAIL"))
-               return STATUS_FAIL;
+            {
+               if (ok)
+                  return STATUS_PASS;
+               ate = 1;
+            } else if (!strcmp (buf + p, "FAIL"))
+            {
+               if (ok)
+                  return STATUS_FAIL;
+               else
+                  ate = -1;
+            }
          } else if (!strcmp (buf, "ID"))
          {
+            if (rst++ > 5)
+               return STATUS_LOOPING;
+            to = uptime () + 5;
             // TODO check ID
             if (manifestsettinglen)
             {
                ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
-               loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 1000);
+               loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 2000);
             }
-         }
+         } else if (!strcmp (buf, "OK"))
+         {
+            if (ate)
+               break;
+            ok = 1;
+         } else if (!strcmp (buf, "ERR"))
+            return STATUS_ERROR;
       }
       p = 0;
    }
    if (!rst)
       return STATUS_SILENT;
+   if (ate > 0)
+      return STATUS_PASS;
+   if (ate < 0)
+      return STATUS_FAIL;
    return STATUS_TIMEOUT;
 };
 
