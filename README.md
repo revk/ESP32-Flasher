@@ -84,8 +84,8 @@ If the flasher is on-line it will check for s/w update, and upgrade, and also ch
 
 ## Button
 
-1. When no target device, cycles an LED in the row of 10 LEDs to select s/w to use from SD card for next flash. Note this only cycles for manifests that are present on SD card, so no action if only one manifest.
-2. When target device connected (pass or fail or even flashing), starts a full flash erase and program cycle.
+1. When no target device, cycles to select manifest to use for next flash. Note this only cycles for manifests that are present on SD card, so no action if only one manifest.
+2. When target device connected (pass or fail or even flashing), starts a full flash erase and program cycle. Note, can be disabled by manifest.
 
 ## SD card file format
 
@@ -135,7 +135,7 @@ The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` 
     },
     {
       "filename": "Faikin-S3-MINI-N4-R2-partition-table.bin",
-      "address": "8000",
+      "address": "8000"
       "url": "https://ota.revk.uk/Faikin-S3-MINI-N4-R2-partition-table.bin"
     },
     {
