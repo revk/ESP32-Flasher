@@ -85,7 +85,7 @@ A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% t
 
 ## SD card file format
 
-The card contains files to flash, and manifest files. The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interall.
+The card contains files to flash, and manifest files. The manifest files are called `manifestN.json` where `N` is the manifest `0` to `9`. This contains details of the flash operation, and is a JSON object with the following fields. You can create any files and directories. Do not create `LOG` or `DOWNLOAD` as used interally.
 
 |Field|Meaning|
 |-----|-------|
@@ -96,6 +96,9 @@ The card contains files to flash, and manifest files. The manifest files are cal
 |`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
+|`"id"`|The first part expected for `ID:` sent from target|
+|`"version"`|The second part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
+|`"build"`|The third part expected for `ID:` sent from target (normally use `"build"` in one file to set this)|
 
 The `"flash"` array is objects with the following...
 
@@ -104,6 +107,7 @@ The `"flash"` array is objects with the following...
 |`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
 |`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
+|`"build"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level|
 
 The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https).
 
@@ -111,12 +115,17 @@ The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` 
 
 ## Target code
 
-Target code should output a line of text on the serial console within five seconds of starting that is either... 
+The target code is expected to provide simple text line output with information for ATE. This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) it has a prefix, and (c) the logs have colour codes.
 
-`ATE: PASS`
+|Output|Meaning|
+|------|-------|
+|`ID:`|Initial ID containing *appID*, *space*, *version*, *space*, *ISO build date*|
+|`ATE: PASS`|ATE tests passed|
+|`ATE: FAIL`|ATE tests failed|
+|`ERR:`|Error in settings|
+|`OK:`|Settings accepted and stored|
 
-or
+The `ATE:` messages are the only ones required.
 
-`ATE: FAIL`
+If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. *version* and *builddate* are checked against the `"build"` data - if match then flashing is not done (regardless of ATE pass/fail). If not sent the ID is not checked.
 
-This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) it has a prefix, and (c) the logs have colour codes.

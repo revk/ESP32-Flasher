@@ -53,7 +53,9 @@ uint32_t flashsize = 0;         // Found flash size
 char *manifestjson = NULL;      // Loaded manifest JSON
 uint32_t manifestsize = 0;      // Total flash bytes
 jo_t j = NULL;                  // Parsed manifest JSON
-char *manifestid = NULL;        // ID check
+char *manifestid = NULL;        // ID check appname+suffix
+char *manifestversion = NULL;   // ID check version
+char *manifestbuild = NULL;     // ID check builddate
 char *manifestsetting = NULL;   // Manifest setting object
 uint32_t manifestsettinglen = 0;        // Len
 
@@ -368,7 +370,7 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *filename, char *url, int f, uint32_t address, uint32_t size);
+typedef void manifest_t (char *filename, char *url, int build, int f, uint32_t address, uint32_t size);
 
 void
 scan_manifest (manifest_t cb)
@@ -383,6 +385,7 @@ scan_manifest (manifest_t cb)
          uint32_t address = 0;
          char *filename = NULL;
          char *url = NULL;
+         int build = -1;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -393,6 +396,13 @@ scan_manifest (manifest_t cb)
             {
                if (jo_next (j) == JO_STRING)
                   url = jo_strdup (j);
+            } else if (!jo_strcmp (j, "build") && !build)
+            {
+               jo_type_t t = jo_next (j);
+               if (t == JO_NUMBER)
+                  build = jo_read_int (j);
+               else if (t == JO_TRUE)
+                  build = 32;
             } else if (!jo_strcmp (j, "address") && !url)
             {
                jo_type_t t = jo_next (j);
@@ -418,14 +428,14 @@ scan_manifest (manifest_t cb)
                   struct stat s = { 0 };
                   fstat (f, &s);
                   if (cb)
-                     cb (filename, url, f, address, s.st_size);
+                     cb (filename, url, build, f, address, s.st_size);
                   close (f);
                } else if (cb)
-                  cb (filename, url, -1, address, 0);
+                  cb (filename, url, build, -1, address, 0);
                free (fn);
             }
          } else if (cb)
-            cb (filename, url, -1, address, 0);
+            cb (filename, url, build, -1, address, 0);
          free (filename);
          free (url);
       }
@@ -524,24 +534,31 @@ upgrade_check (int f, char *filename, char *url)
    free (fn);
 }
 
-
 void
-upgrade_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+load_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
 {
    if (!size)
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
-   upgrade_check (f, filename, url);
+   if(build>=0)
+   { // ID check info
+	   if(lseek(f,build,SEEK_SET)==build)
+	   {
+		   const esp_app_desc_t app;
+		   if(read(f,app,sizeof(app))==sizeof(app))
+		   {
+
+		   }
+	   }
+   }
 }
 
 void
-load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+upgrade_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
 {
-   if (!size)
-      manifestsize = -1;
-   else if (manifestsize != 1)
-      manifestsize += size;
+   load_cb (filename, url, build, f, address, size);
+   upgrade_check (f, filename, url);
 }
 
 const char *
@@ -592,6 +609,12 @@ load_manifest (void)
    manifestid = NULL;
    if (jo_find (j, "id") == JO_STRING)
       manifestid = jo_strdup (j);
+   manifestversion = NULL;
+   if (jo_find (j, "version") == JO_STRING)
+      manifestversion = jo_strdup (j);
+   manifestbuild = NULL;
+   if (jo_find (j, "build") == JO_STRING)
+      manifestbuild = jo_strdup (j);
    manifestsetting = NULL;
    manifestsettinglen = 0;
    if (jo_find (j, "setting"))
@@ -678,7 +701,7 @@ do_erase (void)
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
 void
-flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+flash_cb (char *filename, char *url, int build, int f, uint32_t address, uint32_t size)
 {
    ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
    if (flashe || f < 0 || !size)
