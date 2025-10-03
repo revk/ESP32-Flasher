@@ -265,7 +265,7 @@ enum
          p++;
       if (buf[p] == ':')
       {
-         printf ("%s\n", buf);
+         printf ("\033[1;34m%s\n", buf);
          buf[p++] = 0;
          while (buf[p] == ' ')
             p++;
@@ -279,14 +279,13 @@ enum
             if (!strcmp (buf + p, "PASS"))
             {
                if (ok)
-                  return STATUS_PASS;
+                  break;
                ate = 1;
             } else if (!strcmp (buf + p, "FAIL"))
             {
                if (ok)
-                  return STATUS_FAIL;
-               else
-                  ate = -1;
+                  break;
+               ate = -1;
             }
          } else if (!strcmp (buf, "ID"))
          {
@@ -325,7 +324,9 @@ enum
             }
             if (!match && (manifestversion || manifestbuild))
                match = 1;
-            if (match >= 0 && manifestsettinglen)
+            if (match < 0)
+               break;
+            if (manifestsettinglen)
             {
                ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
                loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 2000);
@@ -974,12 +975,12 @@ flash_task (void *arg)
                      status = STATUS_ERROR;
                      ESP_LOGE (TAG, "Flash failed");
                   }
-               }
-               if (b.connected && !b.reload)
-               {
-                  ESP_LOGE (TAG, "Reset");
-                  esp_loader_reset_target ();
-                  status = target_status ();
+                  if (b.connected && !b.reload)
+                  {
+                     ESP_LOGE (TAG, "Reset");
+                     esp_loader_reset_target ();
+                     status = target_status ();
+                  }
                }
                switch (status)
                {
@@ -1048,7 +1049,6 @@ flash_task (void *arg)
 void
 app_main ()
 {
-   ESP_LOGE (TAG, "Started");
    revk_boot (&mqtt_client_callback);
    revk_start ();
    revk_gpio_output (pwr3, 0);

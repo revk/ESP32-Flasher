@@ -127,6 +127,6 @@ The target code is expected to provide simple text line output with information 
 
 The `ATE:` messages are the only ones required.
 
-If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error.
-If `ID:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail, and if matched flashing is not done regardless of ATE pass/fail.
+If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"build"` is in the file, then the *appname* has to match the start of what is sent in `ID:`.
+If `ID:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail.
 
