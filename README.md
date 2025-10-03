@@ -80,7 +80,7 @@ A row of 10 LEDs indicates progress, can be changing one LED at a time from 0% t
 
 ## Updates
 
-If the flasher is on-line it will check for s/w update, and upgrade, and also check for updates to manifest and files.
+If the flasher is on-line it will check for s/w update, and upgrade, and also check for updates to manifest and files. This is only done when on-line, and not whilst a target device is connected. Manifest files are only checked once unless you change to a new manifest, so a power cycle with no target is needed to force all checks to be done.
 
 ## Button
 
