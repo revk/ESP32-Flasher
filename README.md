@@ -118,7 +118,7 @@ The `"flash"` array is objects with the following...
 |`"url"`|The URL for this file|
 |`"build"`|This is expected on only one file, and can be `true` for normal build info offset `32`, or can be a number specifying a different offset - if set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
 
-Note that `"build"` in the `"flash"` file expects an ESP/IDF 256 byte *app description* block at the specified address in the file. The *app name* and *version* are strings from this, but the *build* time is taken from *date* and *time* fields and formatted as an ISO time, e.g. `2025-10-03T12:38:06`. As such the `ID:` value for this should be the same ISO date format (note, no `Z` or timezone suffix).
+Note that `"build"` in the `"flash"` file expects an ESP/IDF 256 byte *app description* block at the specified offset in the file. The *app name* and *version* are strings from this, but the *build* time is taken from *date* and *time* fields and formatted as an ISO time, e.g. `2025-10-03T12:38:06`. As such the `ID:` value for this should be the same ISO date format (note, no `Z` or timezone suffix).
 
 The `"url"` allows a file to be checked for update, using `If-Modified-Since"`, and replaced. This can be `http://` or `https://` (recommended Let's Encrypt cert for https). It is faster if all files are on the same host, especially if using `https://`.
 
