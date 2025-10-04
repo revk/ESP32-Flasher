@@ -58,7 +58,6 @@ char *manifestid = NULL;        // ID check appname+suffix
 char *manifestversion = NULL;   // ID check version
 char *manifestbuild = NULL;     // ID check builddate
 char *manifestsetting = NULL;   // Manifest setting object
-uint32_t manifestsettinglen = 0;        // Len
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -326,10 +325,10 @@ enum
                match = 1;
             if (match < 0)
                break;
-            if (manifestsettinglen)
+            if (manifestsetting)
             {
-               ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
-               loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 2000);
+               ESP_LOGE (TAG, "Setting %s", manifestsetting);
+               loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
             }
          } else if (!strcmp (buf, "OK"))
          {
@@ -656,37 +655,22 @@ load_manifest (void)
    }
    free (manifestid);
    b.manifestidprefix = 0;
+   free (manifestid);
    manifestid = NULL;
    if (jo_find (j, "id") == JO_STRING)
       manifestid = jo_strdup (j);
+   free (manifestversion);
    manifestversion = NULL;
    if (jo_find (j, "version") == JO_STRING)
       manifestversion = jo_strdup (j);
+   free (manifestbuild);
    manifestbuild = NULL;
    if (jo_find (j, "build") == JO_STRING)
       manifestbuild = jo_strdup (j);
+   free (manifestsetting);
    manifestsetting = NULL;
-   manifestsettinglen = 0;
    if (jo_find (j, "setting"))
-   {
-      int p = jo_pos (j);
-      if (p >= 0)
-      {
-         manifestsetting = manifestjson + p;
-         jo_skip (j);
-         int q = jo_pos (j);
-         if (q > p)
-         {
-            while (q > p && manifestjson[q - 1] <= ' ')
-               q--;             // Messy
-            if (q > p && manifestjson[q - 1] == ',')
-               q--;
-            while (q > p && manifestjson[q - 1] <= ' ')
-               q--;             // Messy
-            manifestsettinglen = q - p;
-         }
-      }
-   }
+      manifestsetting = jo_strdup (j);
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
    b.nocheck = (jo_find (j, "check") == JO_FALSE);
