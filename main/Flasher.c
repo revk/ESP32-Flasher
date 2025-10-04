@@ -415,7 +415,7 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *filename, char *url, int app, int f, uint32_t address, uint32_t size);
+typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size);
 
 void
 scan_manifest (manifest_t cb)
@@ -467,20 +467,14 @@ scan_manifest (manifest_t cb)
             char *fn = NULL;
             if (asprintf (&fn, "%s/%s", sd_dir, filename) >= 0)
             {
-               int f = open (fn, O_RDONLY);
-               if (f >= 0)
-               {
-                  struct stat s = { 0 };
-                  fstat (f, &s);
-                  if (cb)
-                     cb (filename, url, app, f, address, s.st_size);
-                  close (f);
-               } else if (cb)
-                  cb (filename, url, app, -1, address, 0);
+               struct stat s = { 0 };
+               if (stat (fn, &s))
+                  s.st_size = 0;
+               cb (fn, url, app, address, s.st_size);
                free (fn);
             }
          } else if (cb)
-            cb (filename, url, app, -1, address, 0);
+            cb (NULL, url, app, address, 0);
          free (filename);
          free (url);
       }
@@ -489,7 +483,7 @@ scan_manifest (manifest_t cb)
 
 esp_http_client_handle_t client = NULL;
 void
-upgrade_check (int f, char *filename, char *url)
+upgrade_check (char *filename, char *url)
 {
    if (!filename || !url)
       return;
@@ -567,8 +561,8 @@ upgrade_check (int f, char *filename, char *url)
             ESP_LOGE (TAG, "Status %d %s", status, url);
          else
             ESP_LOGE (TAG, "Unchanged %s %s (%u)", h ? : "", filename, s.st_size);
+         while (esp_http_client_read_response (client, (void *) block, sizeof (block)) > 0);    // Yes, not using flush as seems not to actually work
       }
-      esp_http_client_flush_response (client, &len);
    }
    if (e)
       ESP_LOGE (TAG, "Failed %s: %s", url, esp_err_to_name (e));
@@ -580,42 +574,45 @@ upgrade_check (int f, char *filename, char *url)
 }
 
 void
-load_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
+load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 {
    if (!size)
       manifestsize = -1;
    else if (manifestsize != 1)
       manifestsize += size;
-   if (app >= 0 && f >= 0)
-   {                            // ID check info
-      if (lseek (f, app, SEEK_SET) == app)
+   if (app < 0)
+      return;
+   int f = open (fn, O_RDONLY);
+   if (f < 0)
+      return;
+   if (lseek (f, app, SEEK_SET) == app)
+   {
+      esp_app_desc_t app;
+      if (read (f, &app, sizeof (app)) == sizeof (app))
       {
-         esp_app_desc_t app;
-         if (read (f, &app, sizeof (app)) == sizeof (app))
+         if (!manifestid)
          {
-            if (!manifestid)
-            {
-               manifestid = strndup (app.project_name, 32);
-               b.manifestidprefix = 1;
-            }
-            if (!manifestversion)
-               manifestversion = strndup (app.version, 32);
-            if (!manifestbuild)
-            {
-               char temp[20];
-               if (revk_build_date_app (&app, temp))
-                  manifestbuild = strdup (temp);
-            }
+            manifestid = strndup (app.project_name, 32);
+            b.manifestidprefix = 1;
+         }
+         if (!manifestversion)
+            manifestversion = strndup (app.version, 32);
+         if (!manifestbuild)
+         {
+            char temp[20];
+            if (revk_build_date_app (&app, temp))
+               manifestbuild = strdup (temp);
          }
       }
    }
+   close (f);
 }
 
 void
-upgrade_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
+upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 {
-   load_cb (filename, url, app, f, address, size);
-   upgrade_check (f, filename, url);
+   load_cb (fn, url, app, address, size);
+   upgrade_check (fn + sizeof (sd_dir), url);
 }
 
 const char *
@@ -663,7 +660,7 @@ load_manifest (void)
       return "Bad JSON";
    }
    b.manifestidprefix = 0;
-#define x(i) free (manifest##i); manifest##i = NULL; if (jo_find (j, #i)== JO_STRING) manifest##i = jo_strdup (j);
+#define x(i) free (manifest##i); manifest##i = NULL; if (jo_find (j, #i)) manifest##i = jo_strdup (j);
    x (id);
    x (version);
    x (build);
@@ -689,7 +686,7 @@ load_manifest (void)
       if (jo_find (j, "url") == JO_STRING)
       {
          char *url = jo_strdup (j);
-         upgrade_check (f, fn + sizeof (sd_dir), url);
+         upgrade_check (fn + sizeof (sd_dir), url);
          free (url);
       }
       close (f);
@@ -736,11 +733,18 @@ do_erase (void)
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
 void
-flash_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t size)
+flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 {
+   char *filename = fn + sizeof (sd_dir);
    ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
-   if (flashe || f < 0 || !size)
+   if (flashe || !size)
       return;
+   int f = open (fn, O_RDONLY);
+   if (f < 0)
+   {
+      ESP_LOGE (TAG, "Missing %s", filename);
+      return;
+   }
    flashe = esp_loader_flash_start (address, size, BLOCK);
    if (!flashe)
    {
@@ -751,17 +755,18 @@ flash_cb (char *filename, char *url, int app, int f, uint32_t address, uint32_t 
          uint32_t s = read (f, block, BLOCK);
          flashe = esp_loader_flash_write (block, s);
          if (flashe)
-            return;
+            break;
          p += s;
          flashcount += s;
       }
    }
-   if (flashe)
-      ESP_LOGE (TAG, "Cannot flash %06X len %06X %s %s", address, size, filename, esp_err_to_name (flashe));
+   close (f);
    if (!flashe)
       flashe = esp_loader_flash_finish (false);
    if (!flashe)
       flashe = esp_loader_flash_verify ();
+   if (flashe)
+      ESP_LOGE (TAG, "Flash fail %06X len %06X %s %s", address, size, filename, esp_err_to_name (flashe));
 }
 
 esp_loader_error_t
@@ -924,7 +929,10 @@ flash_task (void *arg)
                set_led (manifest * 10, 'O', 'O');
                uint8_t status = STATUS_TIMEOUT;
                if (!b.forceerase && !b.erase && !b.nocheck)
+               {
+                  esp_loader_reset_target ();
                   status = target_status ();
+               }
                if (b.connected
                    && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL)) && status != STATUS_ERROR)
                {
