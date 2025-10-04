@@ -273,7 +273,7 @@ enum
          p++;
       if (buf[p] == ':')
       {
-         printf ("\033[1;34m%s\n", buf);
+         printf ("\033[1;34m%s\033[0m\n", buf);
          buf[p++] = 0;
          while (buf[p] == ' ')
             p++;
@@ -315,7 +315,7 @@ enum
                p++;
             while (buf[p] && buf[p] <= ' ')
                buf[p++] = 0;
-            if (*id && manifestid && b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid))
+            if (*id && manifestid && (b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid)))
             {
                ESP_LOGE (TAG, "ID mismatch [%s]/[%s]", id, manifestid);
                return STATUS_ERROR;
@@ -448,7 +448,7 @@ scan_manifest (manifest_t cb)
                   app = jo_read_int (j);
                else if (t == JO_TRUE)
                   app = 32;
-            } else if (!jo_strcmp (j, "address") && !url)
+            } else if (!jo_strcmp (j, "address"))
             {
                jo_type_t t = jo_next (j);
                if (t == JO_NUMBER)
@@ -483,10 +483,11 @@ scan_manifest (manifest_t cb)
 
 esp_http_client_handle_t client = NULL;
 void
-upgrade_check (char *filename, char *url)
+upgrade_check (char *fn, char *url)
 {
-   if (!filename || !url)
+   if (!fn || !url)
       return;
+   char *filename = fn + sizeof (sd_dir);
    if (!client)
    {
       esp_http_client_config_t config = {
@@ -505,8 +506,6 @@ upgrade_check (char *filename, char *url)
       esp_http_client_set_url (client, url);
    char *dl = NULL;
    asprintf (&dl, "%s/DOWNLOAD", sd_dir);
-   char *fn = NULL;
-   asprintf (&fn, "%s/%s", sd_dir, filename);
    esp_err_t e = 0;
    char *h = NULL;
    struct stat s = { 0 };
@@ -570,7 +569,6 @@ upgrade_check (char *filename, char *url)
       esp_http_client_delete_header (client, "If-Modified-Since");
    free (h);
    free (dl);
-   free (fn);
 }
 
 void
@@ -612,7 +610,7 @@ void
 upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 {
    load_cb (fn, url, app, address, size);
-   upgrade_check (fn + sizeof (sd_dir), url);
+   upgrade_check (fn, url);
 }
 
 const char *
@@ -686,7 +684,7 @@ load_manifest (void)
       if (jo_find (j, "url") == JO_STRING)
       {
          char *url = jo_strdup (j);
-         upgrade_check (fn + sizeof (sd_dir), url);
+         upgrade_check (fn, url);
          free (url);
       }
       close (f);
@@ -735,6 +733,8 @@ esp_loader_error_t flashe = 0;
 void
 flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 {
+   if (!fn)
+      return;
    char *filename = fn + sizeof (sd_dir);
    ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
    if (flashe || !size)
@@ -745,7 +745,7 @@ flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
       ESP_LOGE (TAG, "Missing %s", filename);
       return;
    }
-   flashe = esp_loader_flash_start (address, size, BLOCK);
+   flashe = esp_loader_flash_start (address, (size + BLOCK - 1) / BLOCK * BLOCK, BLOCK);
    if (!flashe)
    {
       uint32_t p = 0;
@@ -753,11 +753,15 @@ flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
       {
          set_led (flashcount * 100 / manifestsize, 'K', 'B');
          uint32_t s = read (f, block, BLOCK);
-         flashe = esp_loader_flash_write (block, s);
-         if (flashe)
+         if (s <= 0)
             break;
          p += s;
          flashcount += s;
+         while (s < BLOCK)
+            block[s++] = 0xFF;
+         flashe = esp_loader_flash_write (block, s);
+         if (flashe)
+            break;
       }
    }
    close (f);
