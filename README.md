@@ -107,7 +107,10 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"id"`|The first part expected for `ID:` sent from target (can use `"app"` in one file to set this)|
 |`"version"`|The second part expected for `ID:` sent from target (normally use `"app"` in one file to set this)|
 |`"build"`|The third part expected for `ID:` sent from target (normally use `"app"` in one file to set this)|
-|`"setting"`|A object to be sent to the target after `ID:` is seen. target should reply `OK:` if accepted, or `ERR:` if not, or reboot (first time) if needed to apply settings.|
+|`"setting"`|A string, or JSOn object to be sent to the target after `ID:` is seen. target should reply `OK:` if accepted, or `ERR:` if not, or reboot (first time) if needed to apply settings.|
+|`"start"`|Alternative string expected to indicate code started running (and to send setting, if set)|
+|`"pass"`|Alternative string expected to indicate ATE pass|
+|`"fail"`|Alternative string expected to indicate ATE fail|
 
 The `"flash"` array is objects with the following...
 
@@ -174,4 +177,4 @@ The `ATE:` messages are the only ones required.
 If `ID:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"app"` is in the file, then the *appname* has to match the start of what is sent in `ID:`.
 If `ID:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail.
 
-On receipt of `ID:` any object in `"setting"` is sent to the target so settings can be applied. An `OK:` or `ERR:` response is expected but the target may reboot (first time) if needed to apply the new settings.
+On receipt of `ID:` the `"setting"` is sent to the target so settings can be applied. An `OK:` or `ERR:` response is expected but the target may reboot (first time) if needed to apply the new settings.

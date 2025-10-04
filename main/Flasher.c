@@ -58,6 +58,9 @@ char *manifestid = NULL;        // ID check appname+suffix
 char *manifestversion = NULL;   // ID check version
 char *manifestbuild = NULL;     // ID check builddate
 char *manifestsetting = NULL;   // Manifest setting object
+char *manifeststart = NULL;     // String indicating code is running (cue to send setting)
+char *manifestpass = NULL;      // String indicating ATE pass
+char *manifestfail = NULL;      // String indicating ATE fail
 
 #define	BLOCK	4096
 uint8_t block[BLOCK];
@@ -258,6 +261,12 @@ enum
          continue;
       buf[p] = 0;
       p = 0;
+      if (manifeststart && !strcmp (buf, manifeststart))
+         strcpy (buf, "ID:");
+      if (manifestpass && !strcmp (buf, manifestpass))
+         strcpy (buf, "ATE:PASS");
+      if (manifestfail && !strcmp (buf, manifestfail))
+         strcpy (buf, "ATE:FAIL");
       if (!strcmp (buf, "invalid header: 0xffffffff"))
          return STATUS_EMPTY;
       while (buf[p] >= 'A' && buf[p] <= 'Z')
@@ -306,22 +315,22 @@ enum
                p++;
             while (buf[p] && buf[p] <= ' ')
                buf[p++] = 0;
-            if (manifestid && b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid))
+            if (*id && manifestid && b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid))
             {
                ESP_LOGE (TAG, "ID mismatch [%s]/[%s]", id, manifestid);
                return STATUS_ERROR;
             }
-            if (!match && manifestversion && strcmp (version, manifestversion))
+            if (!match && *version && manifestversion && strcmp (version, manifestversion))
             {
                match = -1;
                ESP_LOGE (TAG, "Version mismatch [%s]/[%s]", version, manifestversion);
             }
-            if (!match && manifestbuild && strcmp (build, manifestbuild))
+            if (!match && *build && manifestbuild && strcmp (build, manifestbuild))
             {
                match = -1;
                ESP_LOGE (TAG, "Build mismatch [%s]/[%s]", build, manifestbuild);
             }
-            if (!match && (manifestversion || manifestbuild))
+            if (!match && ((*version && manifestversion) || (*build && manifestbuild)))
                match = 1;
             if (match < 0)
                break;
@@ -653,24 +662,16 @@ load_manifest (void)
       free (fn);
       return "Bad JSON";
    }
-   free (manifestid);
    b.manifestidprefix = 0;
-   free (manifestid);
-   manifestid = NULL;
-   if (jo_find (j, "id") == JO_STRING)
-      manifestid = jo_strdup (j);
-   free (manifestversion);
-   manifestversion = NULL;
-   if (jo_find (j, "version") == JO_STRING)
-      manifestversion = jo_strdup (j);
-   free (manifestbuild);
-   manifestbuild = NULL;
-   if (jo_find (j, "build") == JO_STRING)
-      manifestbuild = jo_strdup (j);
-   free (manifestsetting);
-   manifestsetting = NULL;
-   if (jo_find (j, "setting"))
-      manifestsetting = jo_strdup (j);
+#define x(i) free (manifest##i); manifest##i = NULL; if (jo_find (j, #i)== JO_STRING) manifest##i = jo_strdup (j);
+   x (id);
+   x (version);
+   x (build);
+   x (setting);
+   x (start);
+   x (pass);
+   x (fail);
+#undef x
    b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
    b.nocheck = (jo_find (j, "check") == JO_FALSE);
