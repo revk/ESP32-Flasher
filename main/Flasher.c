@@ -241,11 +241,11 @@ enum
    int8_t ate = 0;
    int8_t match = 0;
    char ok = !manifestsetting;
-   uint8_t status = 0;
    char buf[100];
    uint32_t p = 0;
    jo_t j = NULL;
-   while (uptime () <= to && status != STATUS_TIMEOUT)
+   uint8_t status = STATUS_TIMEOUT;
+   while (uptime () <= to && status == STATUS_TIMEOUT)
    {
       uint8_t c;
       esp_loader_error_t e = loader_port_read (&c, 1, 100);
