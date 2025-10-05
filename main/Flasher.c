@@ -282,6 +282,7 @@ enum
       if (j)
       {
          printf ("\033[1;34m%s\033[0m\n", buf);
+	 jo_skip(j); // Check errors
          const char *e = jo_error (j, NULL);
          if (e)
             ESP_LOGE (TAG, "JSON Error: %s", e);
