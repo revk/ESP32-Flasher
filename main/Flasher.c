@@ -226,7 +226,7 @@ device_connect_cb (usb_device_handle_t usb_dev)
 
 enum
 {
-   STATUS_ERROR,
+   STATUS_ERROR,                // error
    STATUS_SILENT,               // no data
    STATUS_EMPTY,                // 0xffffffff error
    STATUS_LOOPING,              // Starting multiple times
@@ -237,13 +237,14 @@ enum
 } target_status (void)
 {
    uint32_t to = uptime () + 5;
-   char buf[100];
-   uint8_t p = 0;
+   char buf[2000];
+   uint32_t p = 0;
    uint8_t rst = 0;
    int8_t ate = 0;
    int8_t match = 0;
    char ok = !manifestsetting;
-   while (uptime () <= to)
+   uint8_t status = 0;
+   while (uptime () <= to && status != STATUS_TIMEOUT)
    {
       uint8_t c;
       esp_loader_error_t e = loader_port_read (&c, 1, 100);
@@ -260,90 +261,86 @@ enum
       if (!p)
          continue;
       buf[p] = 0;
-      p = 0;
       if (manifeststart && !strcmp (buf, manifeststart))
-         strcpy (buf, "START:");
+         strcpy (buf, "{\"app\":null}");
       if (manifestpass && !strcmp (buf, manifestpass))
-         strcpy (buf, "PASS:");
+         strcpy (buf, "{\"ate\":true}");
       if (manifestfail && !strcmp (buf, manifestfail))
-         strcpy (buf, "FAIL:");
+         strcpy (buf, "{\"ate\":false}");
       if (!strcmp (buf, "invalid header: 0xffffffff"))
          return STATUS_EMPTY;
-      while (buf[p] >= 'A' && buf[p] <= 'Z')
-         p++;
-      if (buf[p] == ':')
+      if (!strncmp (buf, "SPIWP:", 6))
+      {
+         ok = !manifestsetting;
+         if (rst++ > 5)
+            return STATUS_LOOPING;
+      }
+      jo_t j = jo_parse_mem (buf, p);
+      p = 0;
+      if (j)
       {
          printf ("\033[1;34m%s\033[0m\n", buf);
-         buf[p++] = 0;
-         while (buf[p] == ' ')
-            p++;
-         if (!strcmp (buf, "SPIWP"))
+         jo_type_t t;
+         if ((t = jo_find (j, "ate")))
          {
-            ok = !manifestsetting;
-            if (rst++ > 5)
-               return STATUS_LOOPING;
-         } else if (!strcmp (buf, "PASS"))
-         {
-            ate = 1;
-            if (ok)
-               break;
-         } else if (!strcmp (buf, "FAIL"))
-         {
-            ate = -1;
-            if (ok)
-               break;
-         } else if (!strcmp (buf, "START"))
+            if (t == JO_TRUE)
+            {
+               ate = 1;
+               if (ok)
+                  break;
+            } else if (t == JO_FALSE)
+            {
+               ate = -1;
+               if (ok)
+                  break;
+            }
+         } else if ((t = jo_find (j, "app")))
          {
             if (rst++ > 5)
-               return STATUS_LOOPING;
-            to = uptime () + 5;
-            char *id = buf + p;
-            while (buf[p] > ' ')
-               p++;
-            while (buf[p] && buf[p] <= ' ')
-               buf[p++] = 0;
-            char *version = buf + p;
-            while (buf[p] > ' ')
-               p++;
-            while (buf[p] && buf[p] <= ' ')
-               buf[p++] = 0;
-            char *build = buf + p;
-            while (buf[p] > ' ')
-               p++;
-            while (buf[p] && buf[p] <= ' ')
-               buf[p++] = 0;
-            if (*id && manifestid && (b.manifestidprefix ? strncmp (id, manifestid, strlen (manifestid)) : strcmp (id, manifestid)))
+               status = STATUS_LOOPING;
+            else
             {
-               ESP_LOGE (TAG, "ID mismatch [%s]/[%s]", id, manifestid);
-               return STATUS_ERROR;
+               to = uptime () + 5;
+               if (t == JO_STRING && manifestid
+                   && (b.manifestidprefix ? jo_strncmp (j, manifestid, strlen (manifestid)) : jo_strcmp (j, manifestid)))
+               {
+                  ESP_LOGE (TAG, "App expected %s", manifestid);
+                  status = STATUS_ERROR;
+               } else
+               {
+                  if ((t = jo_find (j, "version")) == JO_STRING && manifestversion && jo_strcmp (j, manifestversion))
+                  {
+                     match = -1;
+                     ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                  }
+                  if ((t = jo_find (j, "build")) == JO_STRING && manifestbuild && jo_strcmp (j, manifestbuild))
+                  {
+                     match = -1;
+                     ESP_LOGE (TAG, "Build expected %s", manifestbuild);
+                  }
+#if 0
+                  if (!match && ((*version && manifestversion) || (*build && manifestbuild)))
+                     match = 1; // TODO
+#endif
+                  if (match < 0)
+                     break;
+                  if (manifestsetting)
+                  {
+                     ESP_LOGE (TAG, "Setting %s", manifestsetting);
+                     loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+                  }
+               }
             }
-            if (!match && *version && manifestversion && strcmp (version, manifestversion))
-            {
-               match = -1;
-               ESP_LOGE (TAG, "Version mismatch [%s]/[%s]", version, manifestversion);
-            }
-            if (!match && *build && manifestbuild && strcmp (build, manifestbuild))
-            {
-               match = -1;
-               ESP_LOGE (TAG, "Build mismatch [%s]/[%s]", build, manifestbuild);
-            }
-            if (!match && ((*version && manifestversion) || (*build && manifestbuild)))
-               match = 1;
-            if (match < 0)
-               break;
-            if (manifestsetting)
-            {
-               ESP_LOGE (TAG, "Setting %s", manifestsetting);
-               loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
-               loader_port_write ((uint8_t *) "\n", 1, 100);
-            }
-         } else if (!strcmp (buf, "OK"))
+         } else if ((t = jo_find (j, "ok")))
          {
-            if (ate)
-               break;
-            ok = 1;
-         } else if (!strcmp (buf, "ERR"))
-            return STATUS_ERROR;
+            if (t == JO_TRUE)
+            {
+               if (ate)
+                  break;
+               ok = 1;
+            } else if (t == JO_FALSE)
+               status = STATUS_ERROR;
+         }
       }
       p = 0;
    }
@@ -355,7 +352,7 @@ enum
       return STATUS_PASS;
    if (ate < 0)
       return STATUS_FAIL;
-   return STATUS_TIMEOUT;
+   return status;
 };
 
 void
