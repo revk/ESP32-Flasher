@@ -37,7 +37,7 @@ struct
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
    uint8_t checked:1;           // Upgrade checked
-   uint8_t manifestidprefix:1;  // Manifest ID is prefix
+   uint8_t manifestappprefix:1; // manifestapp is prefix
 } volatile b;
 uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
@@ -54,16 +54,24 @@ uint32_t flashsize = 0;         // Found flash size
 char *manifestjson = NULL;      // Loaded manifest JSON
 uint32_t manifestsize = 0;      // Total flash bytes
 jo_t j = NULL;                  // Parsed manifest JSON
-char *manifestid = NULL;        // ID check appname+suffix
-char *manifestversion = NULL;   // ID check version
-char *manifestbuild = NULL;     // ID check builddate
-char *manifestsetting = NULL;   // Manifest setting object
-char *manifeststart = NULL;     // String indicating code is running (cue to send setting)
-char *manifestpass = NULL;      // String indicating ATE pass
-char *manifestfail = NULL;      // String indicating ATE fail
+#define	fields				\
+	x (app);			\
+	x (version);			\
+	x (build);			\
+	x (setting);			\
+	x (start);			\
+	x (pass);			\
+	x (fail);			\
+	xx(wifi,ssid);			\
+	xx(wifi,pass);			\
 
+#define x(f)	char *manifest##f=NULL;
+#define xx(f1,f2)	char *manifest##f1##f2=NULL;
+fields
+#undef	x
+#undef	xx
 #define	BLOCK	4096
-uint8_t block[BLOCK];
+   uint8_t block[BLOCK];
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
@@ -224,6 +232,60 @@ device_connect_cb (usb_device_handle_t usb_dev)
    b.connected = 1;
 }
 
+void
+apply_settings ()
+{
+   char buf[266];
+   if (manifestsetting)
+   {
+      ESP_LOGE (TAG, "Setting %s", manifestsetting);
+      loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+   }
+   if (manifestwifissid)
+   {                            // IMPROV https://www.improv-wifi.com/serial/
+      char *e;
+      uint8_t c;
+      // ID
+      e = buf;
+      e = stpcpy (e, "IMPROV");
+      *e++ = 1;                 // Version
+      *e++ = 3;                 // Command RPC
+      e++;                      // Len
+      *e++ = 3;                 // ID command
+      *e++ = 0;                 // Command len
+      buf[8] = (e - (buf + 9)); // Set len
+      c = 0;                    // Checksum
+      for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) e; q++)
+         c += *q;
+      *e++ = c;
+      loader_port_write ((uint8_t *) buf, e - buf, 2000);
+      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, e - buf, ESP_LOG_INFO);
+      // WiFI
+      e = buf;
+      e = stpcpy (e, "IMPROV");
+      *e++ = 1;                 // Version
+      *e++ = 3;                 // Command RPC
+      e++;                      // Len
+      *e++ = 1;                 // WiFi command
+      e++;                      // Command len
+      *e++ = strlen (manifestwifissid);
+      e = stpcpy (e, manifestwifissid);
+      if (manifestwifipass)
+      {
+         *e++ = strlen (manifestwifipass);
+         e = stpcpy (e, manifestwifipass);
+      }
+      buf[10] = (e - (buf + 11));       // Set cmd len
+      buf[8] = (e - (buf + 9)); // Set len
+      c = 0;                    // Checksum
+      for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) e; q++)
+         c += *q;
+      *e++ = c;
+      loader_port_write ((uint8_t *) buf, e - buf, 2000);
+      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, e - buf, ESP_LOG_INFO);
+   }
+}
+
 enum
 {
    STATUS_ERROR,                // error
@@ -241,7 +303,7 @@ enum
    int8_t ate = 0;
    int8_t match = 0;
    char ok = !manifestsetting;
-   char buf[100];
+   char buf[266];               // Enough for IMRPOV
    uint32_t p = 0;
    jo_t j = NULL;
    uint8_t status = STATUS_TIMEOUT;
@@ -257,7 +319,14 @@ enum
          j = jo_create_alloc ();
       if (j && jo_char (j, c) > 0)
          continue;
-      if (!j && c >= ' ')
+      if (!j && p >= 6 && !strncmp (buf, "IMPROV", 6))
+      {
+         if (p < sizeof (buf) - 1)
+            buf[p++] = c;
+         if (p < 8 || p < buf[8] + 10)
+            continue;
+
+      } else if (!j && c >= ' ')
       {
          if (p < sizeof (buf) - 1)
             buf[p++] = c;
@@ -269,17 +338,71 @@ enum
       {
          if (rst++ > 5)
             status = STATUS_LOOPING;
-         if (manifestsetting)
-         {
-            ESP_LOGE (TAG, "Setting %s", manifestsetting);
-            loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
-         }
+         apply_settings ();
       }
       if (p)
       {                         // String
          buf[p] = 0;
-         p = 0;
-         if (!strncmp (buf, "SPIWP:", 6))
+         if (!strncmp (buf, "IMPROV", 6))
+         {
+            if (p < 9)
+               ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (len error)", buf, p, ESP_LOG_ERROR);
+            else if (buf[6] != 1)
+               ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (ver error)", buf, p, ESP_LOG_ERROR);
+            else
+            {
+               uint8_t c = 0;
+               for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) buf + p - 1; q++)
+                  c += *q;
+               if (c != buf[p - 1])
+                  ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (checksum error)", buf, p, ESP_LOG_ERROR);
+               else
+               {
+                  ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, p, ESP_LOG_INFO);
+                  if (buf[7] == 1 && buf[8] == 1)
+                  {             // Current state
+                     if (buf[9] == 2)
+                        ESP_LOGE ("IMPROV", "Ready");
+                     if (buf[9] == 3)
+                        ESP_LOGE ("IMPROV", "Provisioning");
+                     if (buf[9] == 4)
+                        ESP_LOGE ("IMPROV", "Provisioned");
+                  } else if (buf[7] == 2 && buf[8] == 1)
+                     ESP_LOGE ("IMPROV", "Error %d", buf[9]);
+                  else if (buf[7] == 4)
+                  {             // RPC response
+                     int q = 11;
+                     int n = 0;
+                     while (q + buf[q] + 1 < p)
+                     {
+                        ESP_LOGE ("IMPROV", "%.*s", buf[q], buf + q + 1);
+                        if (buf[9] == 3)
+                        {       // ID check
+                           if (n == 0 && manifestapp && strncmp (buf + q + 1, manifestapp, buf[q]))
+                           {
+                              ESP_LOGE (TAG, "App expected %s", manifestapp);
+                              status = STATUS_ERROR;
+                           }
+                           if (n == 3 && manifestversion)
+                           {
+                              if (!strncmp (buf + q + 1, manifestversion, buf[q]))
+                                 match = 1;
+                              else
+                              {
+                                 match = -1;
+                                 ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                              }
+                           }
+                        }
+                        q += buf[q] + 1;
+                        n++;
+                     }
+                  } else
+                     ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (unknown)", buf, p, ESP_LOG_ERROR);
+               }
+            }
+            p = 0;
+         } else if (!strncmp (buf, "SPIWP:", 6))
          {
             ok = !manifestsetting;
             if (rst++ > 5)
@@ -293,9 +416,10 @@ enum
          else if (!strcmp (buf, "invalid header: 0xffffffff"))
             return STATUS_EMPTY;
          else
-            *buf = 0;
-         if (*buf)
+            p = 0;
+         if (p)
             printf ("\033[1;34m%s\033[0m\n", buf);
+         p = 0;
       } else if (j)
       {                         // JSON
          jo_skip (j);           // Check errors
@@ -318,10 +442,10 @@ enum
                else
                {
                   to = uptime () + 5;
-                  if (t == JO_STRING && manifestid
-                      && (b.manifestidprefix ? jo_strncmp (j, manifestid, strlen (manifestid)) : jo_strcmp (j, manifestid)))
+                  if (t == JO_STRING && manifestapp
+                      && (b.manifestappprefix ? jo_strncmp (j, manifestapp, strlen (manifestapp)) : jo_strcmp (j, manifestapp)))
                   {
-                     ESP_LOGE (TAG, "App expected %s", manifestid);
+                     ESP_LOGE (TAG, "App expected %s", manifestapp);
                      status = STATUS_ERROR;
                   } else
                   {
@@ -610,10 +734,10 @@ load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
       esp_app_desc_t app;
       if (read (f, &app, sizeof (app)) == sizeof (app))
       {
-         if (!manifestid)
+         if (!manifestapp)
          {
-            manifestid = strndup (app.project_name, 32);
-            b.manifestidprefix = 1;
+            manifestapp = strndup (app.project_name, 32);
+            b.manifestappprefix = 1;
          }
          if (!manifestversion)
             manifestversion = strndup (app.version, 32);
@@ -679,17 +803,13 @@ load_manifest (void)
       free (fn);
       return "Bad JSON";
    }
-   b.manifestidprefix = 0;
-#define x(i) free (manifest##i); manifest##i = NULL; if (jo_find (j, #i)) manifest##i = jo_strdup (j);
-   x (id);
-   x (version);
-   x (build);
-   x (setting);
-   x (start);
-   x (pass);
-   x (fail);
+   b.manifestappprefix = 0;
+#define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
+#define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
+   fields
 #undef x
-   b.erase = (jo_find (j, "erase") == JO_TRUE);
+#undef xx
+      b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
    b.nocheck = (jo_find (j, "check") == JO_FALSE);
    b.voltage3v3 = 0;
