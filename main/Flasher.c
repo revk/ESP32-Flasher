@@ -262,11 +262,11 @@ enum
       buf[p] = 0;
       p = 0;
       if (manifeststart && !strcmp (buf, manifeststart))
-         strcpy (buf, "ID:");
+         strcpy (buf, "START:");
       if (manifestpass && !strcmp (buf, manifestpass))
-         strcpy (buf, "ATE:PASS");
+         strcpy (buf, "PASS:");
       if (manifestfail && !strcmp (buf, manifestfail))
-         strcpy (buf, "ATE:FAIL");
+         strcpy (buf, "FAIL:");
       if (!strcmp (buf, "invalid header: 0xffffffff"))
          return STATUS_EMPTY;
       while (buf[p] >= 'A' && buf[p] <= 'Z')
@@ -282,20 +282,18 @@ enum
             ok = !manifestsetting;
             if (rst++ > 5)
                return STATUS_LOOPING;
-         } else if (!strcmp (buf, "ATE"))
-         {
-            if (!strcmp (buf + p, "PASS"))
+         } else if (!strcmp (buf, "PASS"))
             {
                ate = 1;
                if (ok)
                   break;
-            } else if (!strcmp (buf + p, "FAIL"))
+            } else if (!strcmp (buf, "FAIL"))
             {
                ate = -1;
                if (ok)
                   break;
             }
-         } else if (!strcmp (buf, "ID"))
+         } else if (!strcmp (buf, "START"))
          {
             if (rst++ > 5)
                return STATUS_LOOPING;
@@ -338,6 +336,7 @@ enum
             {
                ESP_LOGE (TAG, "Setting %s", manifestsetting);
                loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+               loader_port_write ((uint8_t *) "\n",1,100);
             }
          } else if (!strcmp (buf, "OK"))
          {
