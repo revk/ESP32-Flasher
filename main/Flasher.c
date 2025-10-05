@@ -261,6 +261,7 @@ enum
       if (!p)
          continue;
       buf[p] = 0;
+      p = 0;
       if (manifeststart && !strcmp (buf, manifeststart))
          strcpy (buf, "{\"app\":null}");
       if (manifestpass && !strcmp (buf, manifestpass))
@@ -275,74 +276,78 @@ enum
          if (rst++ > 5)
             return STATUS_LOOPING;
       }
-      jo_t j = jo_parse_mem (buf, p);
-      p = 0;
+      if (*buf != '{')
+         continue;
+      jo_t j = jo_parse_str (buf);
       if (j)
       {
          printf ("\033[1;34m%s\033[0m\n", buf);
-         jo_type_t t;
-         if ((t = jo_find (j, "ate")))
+         const char *e = jo_error (j, NULL);
+         if (e)
+            ESP_LOGE (TAG, "JSON Error: %s", e);
+         else
          {
-            if (t == JO_TRUE)
+            jo_type_t t;
+            if ((t = jo_find (j, "ate")))
             {
-               ate = 1;
-               if (ok)
-                  break;
-            } else if (t == JO_FALSE)
+               if (t == JO_TRUE)
+                  ate = 1;
+               else if (t == JO_FALSE)
+                  ate = -1;
+            } else if ((t = jo_find (j, "app")))
             {
-               ate = -1;
-               if (ok)
-                  break;
-            }
-         } else if ((t = jo_find (j, "app")))
-         {
-            if (rst++ > 5)
-               status = STATUS_LOOPING;
-            else
-            {
-               to = uptime () + 5;
-               if (t == JO_STRING && manifestid
-                   && (b.manifestidprefix ? jo_strncmp (j, manifestid, strlen (manifestid)) : jo_strcmp (j, manifestid)))
+               if (rst++ > 5)
+                  status = STATUS_LOOPING;
+               else
                {
-                  ESP_LOGE (TAG, "App expected %s", manifestid);
-                  status = STATUS_ERROR;
-               } else
-               {
-                  if ((t = jo_find (j, "version")) == JO_STRING && manifestversion && jo_strcmp (j, manifestversion))
+                  to = uptime () + 5;
+                  if (t == JO_STRING && manifestid
+                      && (b.manifestidprefix ? jo_strncmp (j, manifestid, strlen (manifestid)) : jo_strcmp (j, manifestid)))
                   {
-                     match = -1;
-                     ESP_LOGE (TAG, "Version expected %s", manifestversion);
-                  }
-                  if ((t = jo_find (j, "build")) == JO_STRING && manifestbuild && jo_strcmp (j, manifestbuild))
+                     ESP_LOGE (TAG, "App expected %s", manifestid);
+                     status = STATUS_ERROR;
+                  } else
                   {
-                     match = -1;
-                     ESP_LOGE (TAG, "Build expected %s", manifestbuild);
-                  }
-#if 0
-                  if (!match && ((*version && manifestversion) || (*build && manifestbuild)))
-                     match = 1; // TODO
-#endif
-                  if (match < 0)
-                     break;
-                  if (manifestsetting)
-                  {
-                     ESP_LOGE (TAG, "Setting %s", manifestsetting);
-                     loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+                     if (match >= 0 && (t = jo_find (j, "version")) == JO_STRING && manifestversion)
+                     {
+                        if (!jo_strcmp (j, manifestversion))
+                           match++;
+                        else
+                        {
+                           match = -1;
+                           ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                        }
+                     }
+                     if (match >= 0 && (t = jo_find (j, "build")) == JO_STRING && manifestbuild)
+                     {
+                        if (!jo_strcmp (j, manifestbuild))
+                           match++;
+                        else
+                        {
+                           match = -1;
+                           ESP_LOGE (TAG, "Build expected %s", manifestbuild);
+                        }
+                     }
+                     if (match >= 0)
+                        if (manifestsetting)
+                        {
+                           ESP_LOGE (TAG, "Setting %s", manifestsetting);
+                           loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+                        }
                   }
                }
-            }
-         } else if ((t = jo_find (j, "ok")))
-         {
-            if (t == JO_TRUE)
+            } else if ((t = jo_find (j, "ok")))
             {
-               if (ate)
-                  break;
-               ok = 1;
-            } else if (t == JO_FALSE)
-               status = STATUS_ERROR;
+               if (t == JO_TRUE)
+                  ok = 1;
+               else if (t == JO_FALSE)
+                  status = STATUS_ERROR;
+            }
          }
+         jo_free (&j);
       }
-      p = 0;
+      if (ok && ate)
+         break;
    }
    if (match < 0)
       return STATUS_MISMATCH;
