@@ -111,6 +111,7 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"start"`|Alternative string expected to indicate code started running (and to send setting, if set)|
 |`"pass"`|Alternative string expected to indicate ATE pass|
 |`"fail"`|Alternative string expected to indicate ATE fail|
+|`"wifi"`|With values for `"ssid"` and `"pass"` this uses *IMPROV* to set WiFi. If set then *IMPROV* is also used to check `"app"` and `"build"` and `"version"` if set.|
 
 The `"flash"` array is objects with the following...
 
@@ -164,17 +165,13 @@ The `"chip"` is based on chip type, e.g. `ESP32S3`, `MC` for multi core, `PICO` 
 
 The target code is expected to provide simple text line output with information for ATE. This should be done using a simple `printf` and not an `ESP_LOG` as (a) the logs can be disabled, and (b) it has a prefix, and (c) the logs have colour codes.
 
-|Output|Meaning|
-|------|-------|
-|`START:`|Initial ID containing *appID*, *space*, *version*, *space*, *ISO build date*|
-|`PASS:`|ATE tests passed|
-|`FAIL:`|ATE tests failed, may include a reason why|
-|`ERR:`|Error in settings (include error message)|
-|`OK:`|Settings accepted and stored|
+The outputs are expected to be JSON objects, usually with a newline on the end.
 
-The `PASS:`/`FAIL:` messages are the only ones required so as to show pass/fail, otherwise it will show a red/green (timeout) status after several seconds.
+- `"app"` with *appname* and *build suffix*, `"version"` with version, and `"build"` with ISO build date.
+- `"ate"` with `true` (pass) or `false` (fail). A fail may have `"reason"`
+- `"wifi"` with ssid and IPv4 address
+- `"ipv6"` with IPv6
 
-If `START:` is sent then the *appname*+*buildsuffix* is checked against `"id"` field - if no match then this is a file error. If `"id"` is not set but `"app"` is in the file, then the *appname* has to match the start of what is sent in `START:`.
-If `START:` is sent and *version* and/or *build* are set, these are checked, and if a mismatch then flashing is done regardless of ATE pass/fail.
+On receipt of the `"app"` JSON, any `"setting"` JSON is sent and a reply is expected with `"ok":true`.
 
-On receipt of `START:` the `"setting"` is sent to the target so settings can be applied. An `OK:` or `ERR:` response is expected but the target may reboot (first time) if needed to apply the new settings.
+Target code can also use *IMPROV* to accept WiFI settings and report device ID.

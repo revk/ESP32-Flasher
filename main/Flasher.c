@@ -366,7 +366,10 @@ enum
                      if (buf[9] == 3)
                         ESP_LOGE ("IMPROV", "Provisioning");
                      if (buf[9] == 4)
+                     {
                         ESP_LOGE ("IMPROV", "Provisioned");
+                        ok = 1;
+                     }
                   } else if (buf[7] == 2 && buf[8] == 1)
                      ESP_LOGE ("IMPROV", "Error %d", buf[9]);
                   else if (buf[7] == 4)
@@ -382,15 +385,30 @@ enum
                            {
                               ESP_LOGE (TAG, "App expected %s", manifestapp);
                               status = STATUS_ERROR;
-                           }
+                           } else if (!n && !manifestpass)
+                              ate = 1;  // We assume pass
                            if (n == 3 && manifestversion)
                            {
                               if (!strncmp (buf + q + 1, manifestversion, buf[q]))
-                                 match = 1;
-                              else
+                              {
+                                 if (match >= 0)
+                                    match = 1;
+                              } else
                               {
                                  match = -1;
                                  ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                              }
+                           }
+                           if (n == 1 && manifestbuild)
+                           {
+                              if (!strncmp (buf + q + 1, manifestbuild, buf[q]))
+                              {
+                                 if (match >= 0)
+                                    match = 1;
+                              } else
+                              {
+                                 match = -1;
+                                 ESP_LOGE (TAG, "Version expected %s", manifestbuild);
                               }
                            }
                         }
@@ -401,7 +419,6 @@ enum
                      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (unknown)", buf, p, ESP_LOG_ERROR);
                }
             }
-            p = 0;
          } else if (!strncmp (buf, "SPIWP:", 6))
          {
             ok = !manifestsetting;
