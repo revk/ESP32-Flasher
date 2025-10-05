@@ -280,16 +280,18 @@ enum
          {
             if (rst++ > 5)
                status = STATUS_LOOPING;
-         }
-         if (manifestpass && !strcmp (buf, manifestpass))
+         } else if (manifestpass && !strcmp (buf, manifestpass))
             ate = 1;
-         if (manifestfail && !strcmp (buf, manifestfail))
+         else if (manifestfail && !strcmp (buf, manifestfail))
             ate = -1;
-         if (!strcmp (buf, "invalid header: 0xffffffff"))
+         else if (!strcmp (buf, "invalid header: 0xffffffff"))
             return STATUS_EMPTY;
+         else
+            *buf = 0;
+         if (*buf)
+            printf ("\033[1;34m%s\033[0m\n", buf);
       } else if (j)
       {                         // JSON
-         printf ("\033[1;34m%s\033[0m\n", buf);
          jo_skip (j);           // Check errors
          const char *e = jo_error (j, NULL);
          if (e)
@@ -355,6 +357,7 @@ enum
          }
          // Check JSON match
          char *s = jo_finisha (&j);
+         printf ("\033[1;34m%s\033[0m\n", s);
          if (manifeststart && !strcmp (s, manifeststart))
          {
             if (rst++ > 5)
