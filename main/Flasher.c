@@ -265,22 +265,28 @@ enum
       }
       if (!j && !p)
          continue;
+      void do_start (void)
+      {
+         if (rst++ > 5)
+            status = STATUS_LOOPING;
+         if (manifestsetting)
+         {
+            ESP_LOGE (TAG, "Setting %s", manifestsetting);
+            loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+         }
+      }
       if (p)
       {                         // String
-         if (!j)
-            buf[p] = 0;
+         buf[p] = 0;
          p = 0;
          if (!strncmp (buf, "SPIWP:", 6))
          {
             ok = !manifestsetting;
             if (rst++ > 5)
                return STATUS_LOOPING;
-         }
-         if (manifeststart && !strcmp (buf, manifeststart))
-         {
-            if (rst++ > 5)
-               status = STATUS_LOOPING;
-         } else if (manifestpass && !strcmp (buf, manifestpass))
+         } else if (manifeststart && !strcmp (buf, manifeststart))
+            do_start ();
+         else if (manifestpass && !strcmp (buf, manifestpass))
             ate = 1;
          else if (manifestfail && !strcmp (buf, manifestfail))
             ate = -1;
@@ -340,11 +346,7 @@ enum
                         }
                      }
                      if (match >= 0)
-                        if (manifestsetting)
-                        {
-                           ESP_LOGE (TAG, "Setting %s", manifestsetting);
-                           loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
-                        }
+                        do_start ();
                   }
                }
             } else if ((t = jo_find (j, "ok")))
@@ -359,10 +361,7 @@ enum
          char *s = jo_finisha (&j);
          printf ("\033[1;34m%s\033[0m\n", s);
          if (manifeststart && !strcmp (s, manifeststart))
-         {
-            if (rst++ > 5)
-               status = STATUS_LOOPING;
-         }
+            do_start ();
          if (manifestpass && !strcmp (s, manifestpass))
             ate = 1;
          if (manifestfail && !strcmp (s, manifestfail))
