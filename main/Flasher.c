@@ -236,6 +236,7 @@ void
 apply_settings ()
 {
    char buf[266];
+   loader_port_write ((uint8_t *) "\n", 1, 2000);
    if (manifestsetting)
    {
       ESP_LOGE (TAG, "Setting %s", manifestsetting);
@@ -298,7 +299,8 @@ enum
    STATUS_TIMEOUT,              // Not looping but not pass/fail
 } target_status (void)
 {
-   uint32_t to = uptime () + 5;
+#define	WAIT	10
+   uint32_t to = uptime () + WAIT;
    uint8_t rst = 0;
    int8_t ate = 0;
    int8_t match = 0;
@@ -312,7 +314,11 @@ enum
       uint8_t c;
       esp_loader_error_t e = loader_port_read (&c, 1, 100);
       if (e == ESP_LOADER_ERROR_TIMEOUT)
+      {
+         if (ate && ok)
+            break;
          continue;
+      }
       if (e)
          return STATUS_ERROR;
       if (!j && !p && c == '{')
@@ -325,7 +331,6 @@ enum
             buf[p++] = c;
          if (p < 8 || p < buf[8] + 10)
             continue;
-
       } else if (!j && c >= ' ')
       {
          if (p < sizeof (buf) - 1)
@@ -369,6 +374,8 @@ enum
                      {
                         ESP_LOGE ("IMPROV", "Provisioned");
                         ok = 1;
+                        if (!manifestpass)
+                           ate = 1;
                      }
                   } else if (buf[7] == 2 && buf[8] == 1)
                      ESP_LOGE ("IMPROV", "Error %d", buf[9]);
@@ -385,8 +392,7 @@ enum
                            {
                               ESP_LOGE (TAG, "App expected %s", manifestapp);
                               status = STATUS_ERROR;
-                           } else if (!n && !manifestpass)
-                              ate = 1;  // We assume pass
+                           }
                            if (n == 3 && manifestversion)
                            {
                               if (!strncmp (buf + q + 1, manifestversion, buf[q]))
@@ -419,8 +425,10 @@ enum
                      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (unknown)", buf, p, ESP_LOG_ERROR);
                }
             }
+            p = 0;
          } else if (!strncmp (buf, "SPIWP:", 6))
          {
+            to = uptime () + WAIT;
             ok = !manifestsetting;
             if (rst++ > 5)
                return STATUS_LOOPING;
@@ -458,7 +466,7 @@ enum
                   status = STATUS_LOOPING;
                else
                {
-                  to = uptime () + 5;
+                  to = uptime () + WAIT;
                   if (t == JO_STRING && manifestapp
                       && (b.manifestappprefix ? jo_strncmp (j, manifestapp, strlen (manifestapp)) : jo_strcmp (j, manifestapp)))
                   {
@@ -509,8 +517,6 @@ enum
             ate = -1;
          free (s);
       }
-      if (ok && ate)
-         break;
    }
    if (match < 0)
       return STATUS_MISMATCH;
