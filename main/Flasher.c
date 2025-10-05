@@ -283,16 +283,15 @@ enum
             if (rst++ > 5)
                return STATUS_LOOPING;
          } else if (!strcmp (buf, "PASS"))
-            {
-               ate = 1;
-               if (ok)
-                  break;
-            } else if (!strcmp (buf, "FAIL"))
-            {
-               ate = -1;
-               if (ok)
-                  break;
-            }
+         {
+            ate = 1;
+            if (ok)
+               break;
+         } else if (!strcmp (buf, "FAIL"))
+         {
+            ate = -1;
+            if (ok)
+               break;
          } else if (!strcmp (buf, "START"))
          {
             if (rst++ > 5)
@@ -336,7 +335,7 @@ enum
             {
                ESP_LOGE (TAG, "Setting %s", manifestsetting);
                loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
-               loader_port_write ((uint8_t *) "\n",1,100);
+               loader_port_write ((uint8_t *) "\n", 1, 100);
             }
          } else if (!strcmp (buf, "OK"))
          {
