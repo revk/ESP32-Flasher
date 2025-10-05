@@ -237,13 +237,14 @@ enum
 } target_status (void)
 {
    uint32_t to = uptime () + 5;
-   char buf[2000];
-   uint32_t p = 0;
    uint8_t rst = 0;
    int8_t ate = 0;
    int8_t match = 0;
    char ok = !manifestsetting;
    uint8_t status = 0;
+   char buf[100];
+   uint32_t p = 0;
+   jo_t j = NULL;
    while (uptime () <= to && status != STATUS_TIMEOUT)
    {
       uint8_t c;
@@ -252,37 +253,44 @@ enum
          continue;
       if (e)
          return STATUS_ERROR;
-      if (c >= ' ')
+      if (!j && !p && c == '{')
+         j = jo_create_alloc ();
+      if (j && jo_char (j, c) > 0)
+         continue;
+      if (!j && c >= ' ')
       {
          if (p < sizeof (buf) - 1)
             buf[p++] = c;
          continue;
       }
-      if (!p)
+      if (!j && !p)
          continue;
-      buf[p] = 0;
-      p = 0;
-      if (manifeststart && !strcmp (buf, manifeststart))
-         strcpy (buf, "{\"app\":null}");
-      if (manifestpass && !strcmp (buf, manifestpass))
-         strcpy (buf, "{\"ate\":true}");
-      if (manifestfail && !strcmp (buf, manifestfail))
-         strcpy (buf, "{\"ate\":false}");
-      if (!strcmp (buf, "invalid header: 0xffffffff"))
-         return STATUS_EMPTY;
-      if (!strncmp (buf, "SPIWP:", 6))
-      {
-         ok = !manifestsetting;
-         if (rst++ > 5)
-            return STATUS_LOOPING;
-      }
-      if (*buf != '{')
-         continue;
-      jo_t j = jo_parse_str (buf);
-      if (j)
-      {
+      if (p)
+      {                         // String
+         if (!j)
+            buf[p] = 0;
+         p = 0;
+         if (!strncmp (buf, "SPIWP:", 6))
+         {
+            ok = !manifestsetting;
+            if (rst++ > 5)
+               return STATUS_LOOPING;
+         }
+         if (manifeststart && !strcmp (buf, manifeststart))
+         {
+            if (rst++ > 5)
+               status = STATUS_LOOPING;
+         }
+         if (manifestpass && !strcmp (buf, manifestpass))
+            ate = 1;
+         if (manifestfail && !strcmp (buf, manifestfail))
+            ate = -1;
+         if (!strcmp (buf, "invalid header: 0xffffffff"))
+            return STATUS_EMPTY;
+      } else if (j)
+      {                         // JSON
          printf ("\033[1;34m%s\033[0m\n", buf);
-	 jo_skip(j); // Check errors
+         jo_skip (j);           // Check errors
          const char *e = jo_error (j, NULL);
          if (e)
             ESP_LOGE (TAG, "JSON Error: %s", e);
@@ -345,7 +353,18 @@ enum
                   status = STATUS_ERROR;
             }
          }
-         jo_free (&j);
+         // Check JSON match
+         char *s = jo_finisha (&j);
+         if (manifeststart && !strcmp (s, manifeststart))
+         {
+            if (rst++ > 5)
+               status = STATUS_LOOPING;
+         }
+         if (manifestpass && !strcmp (s, manifestpass))
+            ate = 1;
+         if (manifestfail && !strcmp (s, manifestfail))
+            ate = -1;
+         free (s);
       }
       if (ok && ate)
          break;
