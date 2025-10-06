@@ -659,7 +659,8 @@ scan_manifest (manifest_t cb)
 }
 
 esp_http_client_handle_t client = NULL;
-void upgrade_check (char *fn, char *url)
+void
+upgrade_check (char *fn, char *url)
 {
    if (!fn || !url)
       return;
@@ -747,7 +748,8 @@ void upgrade_check (char *fn, char *url)
    free (dl);
 }
 
-void load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
+void
+load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    if (!size)
       manifestsize = -1;
@@ -757,7 +759,7 @@ void load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uin
       return;
    int f = open (fn, O_RDONLY);
    if (f < 0)
-        return;
+      return;
    if (lseek (f, app, SEEK_SET) == app)
    {
       esp_app_desc_t app;
@@ -769,7 +771,7 @@ void load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uin
             b.manifestappprefix = 1;
          }
          if (!manifestversion)
-              manifestversion = strndup (app.version, 32);
+            manifestversion = strndup (app.version, 32);
          if (!manifestbuild)
          {
             char temp[20];
@@ -781,17 +783,19 @@ void load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uin
    close (f);
 }
 
-void upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
+void
+upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    load_cb (fn, url, app, address, size, verify);
    upgrade_check (fn, url);
 }
 
-const char *load_manifest (void)
+const char *
+load_manifest (void)
 {
    close_manifest ();
    char *fn = NULL;
-     asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
+   asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
    int f = open (fn, O_RDONLY);
    if (f < 0)
    {
@@ -881,7 +885,8 @@ const char *load_manifest (void)
    return NULL;
 }
 
-esp_loader_error_t do_erase (void)
+esp_loader_error_t
+do_erase (void)
 {
    b.forceerase = 0;
    ESP_LOGE (TAG, "Erase whole flash");
@@ -891,15 +896,16 @@ esp_loader_error_t do_erase (void)
       set_led (p * 100 / flashsize, 'B', 'K');
       esp_loader_error_t e = esp_loader_flash_erase_region (p, BLOCK);
       if (e)
-           return e;
-        p += BLOCK;
+         return e;
+      p += BLOCK;
    }
    return 0;
 }
 
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
-void flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
+void
+flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    if (!fn || flashe || !size)
       return;
@@ -937,12 +943,15 @@ void flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, ui
       if (!flashe && verify)
       {
          flashe = esp_loader_flash_verify ();   // This does not seem to work if flashing to end of flash!
-         if (flashe && try)
+         if (flashe)
          {
-            flashcount -= p;
             ESP_LOGE (TAG, "Verify fail %06X len %06X %s", address, size, filename);
-            flashe = 0;
-            continue;
+            if (try)
+            {
+               flashcount -= p;
+               flashe = 0;
+               continue;
+            }
          }
       }
       if (flashe)
@@ -951,7 +960,8 @@ void flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, ui
    }
 }
 
-esp_loader_error_t do_flash (void)
+esp_loader_error_t
+do_flash (void)
 {
    ESP_LOGE (TAG, "Flash %u bytes", manifestsize);
    flashe = 0;
@@ -960,25 +970,26 @@ esp_loader_error_t do_flash (void)
    return flashe;
 }
 
-void flash_task (void *arg)
+void
+flash_task (void *arg)
 {
    esp_err_t e = 0;
    // SD card set up
-     revk_gpio_input (sdcd);
+   revk_gpio_input (sdcd);
    sdmmc_card_t *card = NULL;
    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT ();
    sdmmc_host_t host = SDMMC_HOST_DEFAULT ();
-     slot.clk = sdclk.num;
-     slot.cmd = sdcmd.num;
-     slot.d0 = sddat0.num;
-     slot.d1 = sddat1.set ? sddat1.num : -1;
-     slot.d2 = sddat2.set ? sddat2.num : -1;
-     slot.d3 = sddat3.set ? sddat3.num : -1;
-     slot.width = (sddat2.set && sddat3.set ? 4 : sddat1.set ? 2 : 1);
+   slot.clk = sdclk.num;
+   slot.cmd = sdcmd.num;
+   slot.d0 = sddat0.num;
+   slot.d1 = sddat1.set ? sddat1.num : -1;
+   slot.d2 = sddat2.set ? sddat2.num : -1;
+   slot.d3 = sddat3.set ? sddat3.num : -1;
+   slot.width = (sddat2.set && sddat3.set ? 4 : sddat1.set ? 2 : 1);
    if (slot.width == 1)
       slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;    // Old boards?
-     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-     host.slot = SDMMC_HOST_SLOT_1;
+   host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+   host.slot = SDMMC_HOST_SLOT_1;
    {                            // USB init
       const usb_host_config_t host_config = {
          .skip_phy_setup = false,
@@ -1224,7 +1235,8 @@ void flash_task (void *arg)
 
 //--------------------------------------------------------------------------------
 // Main
-void app_main ()
+void
+app_main ()
 {
    revk_boot (&mqtt_client_callback);
    revk_start ();
