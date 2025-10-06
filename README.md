@@ -121,6 +121,7 @@ The `"flash"` array is objects with the following...
 |`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
 |`"app"`|This is expected on only one file, and can be `true` for normal ESP application description offset `32`, or can be a number specifying a different offset. If set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
+|`"verify"`|If `false` then do not verify flash|
 
 Note that `"app"` in the `"flash"` file expects an ESP/IDF 256 byte *app description* block at the specified offset in the file. The *app name* and *version* are strings from this, but the *build* time is taken from *date* and *time* fields and formatted as an ISO time, e.g. `2025-10-03T12:38:06`. As such the `START:` value for this should be the same ISO date format (note, no `Z` or timezone suffix).
 

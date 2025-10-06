@@ -584,7 +584,7 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size);
+typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify);
 
 void
 scan_manifest (manifest_t cb)
@@ -600,6 +600,7 @@ scan_manifest (manifest_t cb)
          char *filename = NULL;
          char *url = NULL;
          int app = -1;
+         char verify = 1;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -628,6 +629,11 @@ scan_manifest (manifest_t cb)
                   address = strtoul (a, NULL, 16);
                   free (a);
                }
+            } else if (!jo_strcmp (j, "verify"))
+            {
+               jo_type_t t = jo_next (j);
+               if (t == JO_FALSE)
+                  verify = 0;
             } else
                jo_next (j);
          }
@@ -639,11 +645,11 @@ scan_manifest (manifest_t cb)
                struct stat s = { 0 };
                if (stat (fn, &s))
                   s.st_size = 0;
-               cb (fn, url, app, address, s.st_size);
+               cb (fn, url, app, address, s.st_size, verify);
                free (fn);
             }
          } else if (cb)
-            cb (NULL, url, app, address, 0);
+            cb (NULL, url, app, address, 0, verify);
          free (filename);
          free (url);
       }
@@ -741,7 +747,7 @@ upgrade_check (char *fn, char *url)
 }
 
 void
-load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
+load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
 {
    if (!size)
       manifestsize = -1;
@@ -776,9 +782,9 @@ load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
 }
 
 void
-upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
+upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
 {
-   load_cb (fn, url, app, address, size);
+   load_cb (fn, url, app, address, size, verify);
    upgrade_check (fn, url);
 }
 
@@ -896,7 +902,7 @@ do_erase (void)
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
 void
-flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
+flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
 {
    if (!fn)
       return;
@@ -911,31 +917,29 @@ flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size)
       return;
    }
    flashe = esp_loader_flash_start (address, (size + BLOCK - 1) / BLOCK * BLOCK, BLOCK);
+   uint32_t p = 0;
    if (!flashe)
    {
-      uint32_t p = 0;
       while (p < size)
       {
          set_led (flashcount * 100 / manifestsize, 'K', 'B');
          uint32_t s = read (f, block, BLOCK);
          if (s <= 0)
             break;
-         p += s;
-         flashcount += s;
-         while (s < BLOCK)
-            block[s++] = 0xFF;
          flashe = esp_loader_flash_write (block, s);
          if (flashe)
             break;
+         p += s;
+         flashcount += s;
       }
    }
    close (f);
    if (!flashe)
       flashe = esp_loader_flash_finish (false);
-   if (!flashe)
-      flashe = esp_loader_flash_verify ();
+   if (!flashe && verify)
+      flashe = esp_loader_flash_verify ();      // This does not seem to work if flashing to end of flash!
    if (flashe)
-      ESP_LOGE (TAG, "Flash fail %06X len %06X %s %s", address, size, filename, esp_err_to_name (flashe));
+      ESP_LOGE (TAG, "Flash fail %06X len %06X at %06X %s (%d)", address, size, p, filename, flashe);
 }
 
 esp_loader_error_t
