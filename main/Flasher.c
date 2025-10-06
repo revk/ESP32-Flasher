@@ -584,7 +584,7 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify);
+typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify);
 
 void
 scan_manifest (manifest_t cb)
@@ -600,7 +600,7 @@ scan_manifest (manifest_t cb)
          char *filename = NULL;
          char *url = NULL;
          int app = -1;
-         char verify = 1;
+         uint8_t verify = 1;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -634,6 +634,8 @@ scan_manifest (manifest_t cb)
                jo_type_t t = jo_next (j);
                if (t == JO_FALSE)
                   verify = 0;
+               else if (t == JO_NUMBER)
+                  verify = jo_read_int (j);
             } else
                jo_next (j);
          }
@@ -657,8 +659,7 @@ scan_manifest (manifest_t cb)
 }
 
 esp_http_client_handle_t client = NULL;
-void
-upgrade_check (char *fn, char *url)
+void upgrade_check (char *fn, char *url)
 {
    if (!fn || !url)
       return;
@@ -746,18 +747,17 @@ upgrade_check (char *fn, char *url)
    free (dl);
 }
 
-void
-load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
+void load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    if (!size)
       manifestsize = -1;
-   else if (manifestsize != 1)
+   else if (manifestsize != -1)
       manifestsize += size;
    if (app < 0)
       return;
    int f = open (fn, O_RDONLY);
    if (f < 0)
-      return;
+        return;
    if (lseek (f, app, SEEK_SET) == app)
    {
       esp_app_desc_t app;
@@ -769,7 +769,7 @@ load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char ver
             b.manifestappprefix = 1;
          }
          if (!manifestversion)
-            manifestversion = strndup (app.version, 32);
+              manifestversion = strndup (app.version, 32);
          if (!manifestbuild)
          {
             char temp[20];
@@ -781,19 +781,17 @@ load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char ver
    close (f);
 }
 
-void
-upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
+void upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    load_cb (fn, url, app, address, size, verify);
    upgrade_check (fn, url);
 }
 
-const char *
-load_manifest (void)
+const char *load_manifest (void)
 {
    close_manifest ();
    char *fn = NULL;
-   asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
+     asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
    int f = open (fn, O_RDONLY);
    if (f < 0)
    {
@@ -873,6 +871,7 @@ load_manifest (void)
    {
       close (f);
       free (fn);
+      manifestsize = 0;
       scan_manifest (load_cb);
    }
    if (manifestsize == -1)
@@ -882,8 +881,7 @@ load_manifest (void)
    return NULL;
 }
 
-esp_loader_error_t
-do_erase (void)
+esp_loader_error_t do_erase (void)
 {
    b.forceerase = 0;
    ESP_LOGE (TAG, "Erase whole flash");
@@ -893,57 +891,67 @@ do_erase (void)
       set_led (p * 100 / flashsize, 'B', 'K');
       esp_loader_error_t e = esp_loader_flash_erase_region (p, BLOCK);
       if (e)
-         return e;
-      p += BLOCK;
+           return e;
+        p += BLOCK;
    }
    return 0;
 }
 
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
-void
-flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, char verify)
+void flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
-   if (!fn)
+   if (!fn || flashe || !size)
       return;
    char *filename = fn + sizeof (sd_dir);
-   ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
-   if (flashe || !size)
-      return;
-   int f = open (fn, O_RDONLY);
-   if (f < 0)
+   int try = (verify ? : 1);
+   while (try--)
    {
-      ESP_LOGE (TAG, "Missing %s", filename);
-      return;
-   }
-   flashe = esp_loader_flash_start (address, (size + BLOCK - 1) / BLOCK * BLOCK, BLOCK);
-   uint32_t p = 0;
-   if (!flashe)
-   {
-      while (p < size)
+      ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
+      int f = open (fn, O_RDONLY);
+      if (f < 0)
       {
-         set_led (flashcount * 100 / manifestsize, 'K', 'B');
-         uint32_t s = read (f, block, BLOCK);
-         if (s <= 0)
-            break;
-         flashe = esp_loader_flash_write (block, s);
-         if (flashe)
-            break;
-         p += s;
-         flashcount += s;
+         ESP_LOGE (TAG, "Missing %s", filename);
+         return;
       }
+      flashe = esp_loader_flash_start (address, size, BLOCK);
+      uint32_t p = 0;
+      if (!flashe)
+      {
+         while (p < size)
+         {
+            set_led (flashcount * 100 / manifestsize, 'K', 'B');
+            uint32_t s = read (f, block, BLOCK);
+            if (s <= 0)
+               break;
+            flashe = esp_loader_flash_write (block, s);
+            if (flashe)
+               break;
+            p += s;
+            flashcount += s;
+         }
+      }
+      close (f);
+      if (!flashe)
+         flashe = esp_loader_flash_finish (false);
+      if (!flashe && verify)
+      {
+         flashe = esp_loader_flash_verify ();   // This does not seem to work if flashing to end of flash!
+         if (flashe && try)
+         {
+            flashcount -= p;
+            ESP_LOGE (TAG, "Verify fail %06X len %06X %s", address, size, filename);
+            flashe = 0;
+            continue;
+         }
+      }
+      if (flashe)
+         ESP_LOGE (TAG, "Flash fail %06X len %06X at %06X %s (%d)", address, size, p, filename, flashe);
+      break;
    }
-   close (f);
-   if (!flashe)
-      flashe = esp_loader_flash_finish (false);
-   if (!flashe && verify)
-      flashe = esp_loader_flash_verify ();      // This does not seem to work if flashing to end of flash!
-   if (flashe)
-      ESP_LOGE (TAG, "Flash fail %06X len %06X at %06X %s (%d)", address, size, p, filename, flashe);
 }
 
-esp_loader_error_t
-do_flash (void)
+esp_loader_error_t do_flash (void)
 {
    ESP_LOGE (TAG, "Flash %u bytes", manifestsize);
    flashe = 0;
@@ -952,26 +960,25 @@ do_flash (void)
    return flashe;
 }
 
-void
-flash_task (void *arg)
+void flash_task (void *arg)
 {
    esp_err_t e = 0;
    // SD card set up
-   revk_gpio_input (sdcd);
+     revk_gpio_input (sdcd);
    sdmmc_card_t *card = NULL;
    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT ();
    sdmmc_host_t host = SDMMC_HOST_DEFAULT ();
-   slot.clk = sdclk.num;
-   slot.cmd = sdcmd.num;
-   slot.d0 = sddat0.num;
-   slot.d1 = sddat1.set ? sddat1.num : -1;
-   slot.d2 = sddat2.set ? sddat2.num : -1;
-   slot.d3 = sddat3.set ? sddat3.num : -1;
-   slot.width = (sddat2.set && sddat3.set ? 4 : sddat1.set ? 2 : 1);
+     slot.clk = sdclk.num;
+     slot.cmd = sdcmd.num;
+     slot.d0 = sddat0.num;
+     slot.d1 = sddat1.set ? sddat1.num : -1;
+     slot.d2 = sddat2.set ? sddat2.num : -1;
+     slot.d3 = sddat3.set ? sddat3.num : -1;
+     slot.width = (sddat2.set && sddat3.set ? 4 : sddat1.set ? 2 : 1);
    if (slot.width == 1)
       slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;    // Old boards?
-   host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-   host.slot = SDMMC_HOST_SLOT_1;
+     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+     host.slot = SDMMC_HOST_SLOT_1;
    {                            // USB init
       const usb_host_config_t host_config = {
          .skip_phy_setup = false,
@@ -1217,8 +1224,7 @@ flash_task (void *arg)
 
 //--------------------------------------------------------------------------------
 // Main
-void
-app_main ()
+void app_main ()
 {
    revk_boot (&mqtt_client_callback);
    revk_start ();
