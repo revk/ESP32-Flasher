@@ -37,6 +37,7 @@ struct
    uint8_t connected:1;         // Connected
    uint8_t fileerror:1;         // File error
    uint8_t checked:1;           // Upgrade checked
+   uint8_t manifestappprefix:1; // manifestapp is prefix
 } volatile b;
 uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
@@ -53,12 +54,24 @@ uint32_t flashsize = 0;         // Found flash size
 char *manifestjson = NULL;      // Loaded manifest JSON
 uint32_t manifestsize = 0;      // Total flash bytes
 jo_t j = NULL;                  // Parsed manifest JSON
-char *manifestid = NULL;        // ID check
-char *manifestsetting = NULL;   // Manifest setting object
-uint32_t manifestsettinglen = 0;        // Len
+#define	fields				\
+	x (app);			\
+	x (version);			\
+	x (build);			\
+	x (setting);			\
+	x (start);			\
+	x (pass);			\
+	x (fail);			\
+	xx(wifi,ssid);			\
+	xx(wifi,pass);			\
 
+#define x(f)	char *manifest##f=NULL;
+#define xx(f1,f2)	char *manifest##f1##f2=NULL;
+fields
+#undef	x
+#undef	xx
 #define	BLOCK	4096
-uint8_t block[BLOCK];
+   uint8_t block[BLOCK];
 
 #ifdef  CONFIG_TINYUSB_MSC_MOUNT_PATH
 const char sd_dir[] = CONFIG_TINYUSB_MSC_MOUNT_PATH;
@@ -219,79 +232,308 @@ device_connect_cb (usb_device_handle_t usb_dev)
    b.connected = 1;
 }
 
+void
+apply_settings ()
+{
+   char buf[266];
+   loader_port_write ((uint8_t *) "\n", 1, 2000);
+   if (manifestsetting)
+   {
+      ESP_LOGE (TAG, "Setting %s", manifestsetting);
+      loader_port_write ((uint8_t *) manifestsetting, strlen (manifestsetting), 2000);
+   }
+   if (manifestwifissid)
+   {                            // IMPROV https://www.improv-wifi.com/serial/
+      char *e;
+      uint8_t c;
+      // ID
+      e = buf;
+      e = stpcpy (e, "IMPROV");
+      *e++ = 1;                 // Version
+      *e++ = 3;                 // Command RPC
+      e++;                      // Len
+      *e++ = 3;                 // ID command
+      *e++ = 0;                 // Command len
+      buf[8] = (e - (buf + 9)); // Set len
+      c = 0;                    // Checksum
+      for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) e; q++)
+         c += *q;
+      *e++ = c;
+      loader_port_write ((uint8_t *) buf, e - buf, 2000);
+      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, e - buf, ESP_LOG_INFO);
+      // WiFI
+      e = buf;
+      e = stpcpy (e, "IMPROV");
+      *e++ = 1;                 // Version
+      *e++ = 3;                 // Command RPC
+      e++;                      // Len
+      *e++ = 1;                 // WiFi command
+      e++;                      // Command len
+      *e++ = strlen (manifestwifissid);
+      e = stpcpy (e, manifestwifissid);
+      if (manifestwifipass)
+      {
+         *e++ = strlen (manifestwifipass);
+         e = stpcpy (e, manifestwifipass);
+      }
+      buf[10] = (e - (buf + 11));       // Set cmd len
+      buf[8] = (e - (buf + 9)); // Set len
+      c = 0;                    // Checksum
+      for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) e; q++)
+         c += *q;
+      *e++ = c;
+      loader_port_write ((uint8_t *) buf, e - buf, 2000);
+      ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, e - buf, ESP_LOG_INFO);
+   }
+}
+
 enum
 {
-   STATUS_ERROR,
+   STATUS_ERROR,                // error
    STATUS_SILENT,               // no data
    STATUS_EMPTY,                // 0xffffffff error
    STATUS_LOOPING,              // Starting multiple times
    STATUS_FAIL,                 // ATE: FAIL
    STATUS_PASS,                 // ATE: PASS
+   STATUS_MISMATCH,             // Code needs flashing as version mismatch
    STATUS_TIMEOUT,              // Not looping but not pass/fail
 } target_status (void)
 {
-   uint32_t to = uptime () + 5;
-   char buf[100];
-   uint8_t p = 0;
+#define	WAIT	10
+   uint32_t to = uptime () + WAIT;
    uint8_t rst = 0;
-   while (uptime () <= to)
+   int8_t ate = 0;
+   int8_t match = 0;
+   char ok = !manifestsetting;
+   char buf[266];               // Enough for IMRPOV
+   uint32_t p = 0;
+   jo_t j = NULL;
+   uint8_t status = STATUS_TIMEOUT;
+   while (uptime () <= to && status == STATUS_TIMEOUT)
    {
       uint8_t c;
       esp_loader_error_t e = loader_port_read (&c, 1, 100);
       if (e == ESP_LOADER_ERROR_TIMEOUT)
+      {
+         if (ate && ok)
+            break;
          continue;
+      }
       if (e)
          return STATUS_ERROR;
-      if (c >= ' ')
+      if (!j && !p && c == '{')
+         j = jo_create_alloc ();
+      if (j && jo_char (j, c) > 0)
+         continue;
+      if (!j && p >= 6 && !strncmp (buf, "IMPROV", 6))
+      {
+         if (p < sizeof (buf) - 1)
+            buf[p++] = c;
+         if (p < 8 || p < buf[8] + 10)
+            continue;
+      } else if (!j && c >= ' ')
       {
          if (p < sizeof (buf) - 1)
             buf[p++] = c;
          continue;
       }
-      if (!p)
+      if (!j && !p)
          continue;
-      buf[p] = 0;
-      p = 0;
-      if (!strcmp (buf, "invalid header: 0xffffffff"))
-         return STATUS_EMPTY;
-      if (!strncmp (buf, "Build:", 6) && rst++ > 4)
-         return STATUS_LOOPING;
-      while (buf[p] >= 'A' && buf[p] <= 'Z')
-         p++;
-      if (buf[p] == ':')
+      void do_start (void)
       {
-         printf ("%s\n", buf);
-         buf[p++] = 0;
-         while (buf[p] == ' ')
-            p++;
-         if (!strcmp (buf, "ATE"))
+         if (rst++ > 5)
+            status = STATUS_LOOPING;
+         apply_settings ();
+      }
+      if (p)
+      {                         // String
+         buf[p] = 0;
+         if (!strncmp (buf, "IMPROV", 6))
          {
-            if (!strcmp (buf + p, "PASS"))
-               return STATUS_PASS;
-            if (!strcmp (buf + p, "FAIL"))
-               return STATUS_FAIL;
-         } else if (!strcmp (buf, "ID"))
-         {
-            // TODO check ID
-            if (manifestsetting)
+            if (p < 9)
+               ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (len error)", buf, p, ESP_LOG_ERROR);
+            else if (buf[6] != 1)
+               ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (ver error)", buf, p, ESP_LOG_ERROR);
+            else
             {
-               ESP_LOGE (TAG, "Setting %.*s", manifestsettinglen, manifestsetting);
-               loader_port_write ((uint8_t *) manifestsetting, manifestsettinglen, 1000);
+               uint8_t c = 0;
+               for (uint8_t * q = (uint8_t *) buf; q < (uint8_t *) buf + p - 1; q++)
+                  c += *q;
+               if (c != buf[p - 1])
+                  ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (checksum error)", buf, p, ESP_LOG_ERROR);
+               else
+               {
+                  ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV", buf, p, ESP_LOG_INFO);
+                  if (buf[7] == 1 && buf[8] == 1)
+                  {             // Current state
+                     if (buf[9] == 2)
+                        ESP_LOGE ("IMPROV", "Ready");
+                     if (buf[9] == 3)
+                        ESP_LOGE ("IMPROV", "Provisioning");
+                     if (buf[9] == 4)
+                     {
+                        ESP_LOGE ("IMPROV", "Provisioned");
+                        ok = 1;
+                        if (!manifestpass)
+                           ate = 1;
+                     }
+                  } else if (buf[7] == 2 && buf[8] == 1)
+                     ESP_LOGE ("IMPROV", "Error %d", buf[9]);
+                  else if (buf[7] == 4)
+                  {             // RPC response
+                     int q = 11;
+                     int n = 0;
+                     while (q + buf[q] + 1 < p)
+                     {
+                        ESP_LOGE ("IMPROV", "%.*s", buf[q], buf + q + 1);
+                        if (buf[9] == 3)
+                        {       // ID check
+                           if (n == 0 && manifestapp && strncmp (buf + q + 1, manifestapp, buf[q]))
+                           {
+                              ESP_LOGE (TAG, "App expected %s", manifestapp);
+                              status = STATUS_ERROR;
+                           }
+                           if (n == 3 && manifestversion)
+                           {
+                              if (!strncmp (buf + q + 1, manifestversion, buf[q]))
+                              {
+                                 if (match >= 0)
+                                    match = 1;
+                              } else
+                              {
+                                 match = -1;
+                                 ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                              }
+                           }
+                           if (n == 1 && manifestbuild)
+                           {
+                              if (!strncmp (buf + q + 1, manifestbuild, buf[q]))
+                              {
+                                 if (match >= 0)
+                                    match = 1;
+                              } else
+                              {
+                                 match = -1;
+                                 ESP_LOGE (TAG, "Version expected %s", manifestbuild);
+                              }
+                           }
+                        }
+                        q += buf[q] + 1;
+                        n++;
+                     }
+                  } else
+                     ESP_LOG_BUFFER_HEX_LEVEL ("IMPROV (unknown)", buf, p, ESP_LOG_ERROR);
+               }
+            }
+            p = 0;
+         } else if (!strncmp (buf, "SPIWP:", 6))
+         {
+            to = uptime () + WAIT;
+            ok = !manifestsetting;
+            if (rst++ > 5)
+               return STATUS_LOOPING;
+         } else if (manifeststart && !strcmp (buf, manifeststart))
+            do_start ();
+         else if (manifestpass && !strcmp (buf, manifestpass))
+            ate = 1;
+         else if (manifestfail && !strcmp (buf, manifestfail))
+            ate = -1;
+         else if (!strcmp (buf, "invalid header: 0xffffffff"))
+            return STATUS_EMPTY;
+         else
+            p = 0;
+         if (p)
+            printf ("\033[1;34m%s\033[0m\n", buf);
+         p = 0;
+      } else if (j)
+      {                         // JSON
+         jo_skip (j);           // Check errors
+         const char *e = jo_error (j, NULL);
+         if (e)
+            ESP_LOGE (TAG, "JSON Error: %s", e);
+         else
+         {
+            jo_type_t t;
+            if ((t = jo_find (j, "ate")))
+            {
+               if (t == JO_TRUE)
+                  ate = 1;
+               else if (t == JO_FALSE)
+                  ate = -1;
+            } else if ((t = jo_find (j, "app")))
+            {
+               if (rst++ > 5)
+                  status = STATUS_LOOPING;
+               else
+               {
+                  to = uptime () + WAIT;
+                  if (t == JO_STRING && manifestapp
+                      && (b.manifestappprefix ? jo_strncmp (j, manifestapp, strlen (manifestapp)) : jo_strcmp (j, manifestapp)))
+                  {
+                     ESP_LOGE (TAG, "App expected %s", manifestapp);
+                     status = STATUS_ERROR;
+                  } else
+                  {
+                     if (match >= 0 && (t = jo_find (j, "version")) == JO_STRING && manifestversion)
+                     {
+                        if (!jo_strcmp (j, manifestversion))
+                           match++;
+                        else
+                        {
+                           match = -1;
+                           ESP_LOGE (TAG, "Version expected %s", manifestversion);
+                        }
+                     }
+                     if (match >= 0 && (t = jo_find (j, "build")) == JO_STRING && manifestbuild)
+                     {
+                        if (!jo_strcmp (j, manifestbuild))
+                           match++;
+                        else
+                        {
+                           match = -1;
+                           ESP_LOGE (TAG, "Build expected %s", manifestbuild);
+                        }
+                     }
+                     if (match >= 0)
+                        do_start ();
+                  }
+               }
+            } else if ((t = jo_find (j, "ok")))
+            {
+               if (t == JO_TRUE)
+                  ok = 1;
+               else if (t == JO_FALSE)
+                  status = STATUS_ERROR;
             }
          }
+         // Check JSON match
+         char *s = jo_finisha (&j);
+         printf ("\033[1;34m%s\033[0m\n", s);
+         if (manifeststart && !strcmp (s, manifeststart))
+            do_start ();
+         if (manifestpass && !strcmp (s, manifestpass))
+            ate = 1;
+         if (manifestfail && !strcmp (s, manifestfail))
+            ate = -1;
+         free (s);
       }
-      p = 0;
    }
+   if (match < 0)
+      return STATUS_MISMATCH;
    if (!rst)
       return STATUS_SILENT;
-   return STATUS_TIMEOUT;
+   if (ate > 0)
+      return STATUS_PASS;
+   if (ate < 0)
+      return STATUS_FAIL;
+   return status;
 };
 
 void
 chip_info (void)
 {                               // Get chip info
-   const char *const chips[] =
-      { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2", "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
+   const char *const chips[] = { "ESP8266", "ESP32", "ESP32S2", "ESP32C3", "ESP32S3", "ESP32C2",
+      "ESP32C5", "ESP32H2", "ESP32C6", "ESP32P4", "ESP_MAX",
       "ESP_UNKNOWN"
    };
    char *c = chip;
@@ -342,7 +584,7 @@ close_manifest (void)
    manifestjson = NULL;
 }
 
-typedef void manifest_t (char *filename, char *url, int f, uint32_t address, uint32_t size);
+typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify);
 
 void
 scan_manifest (manifest_t cb)
@@ -357,6 +599,8 @@ scan_manifest (manifest_t cb)
          uint32_t address = 0;
          char *filename = NULL;
          char *url = NULL;
+         int app = -1;
+         uint8_t verify = 1;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -367,7 +611,14 @@ scan_manifest (manifest_t cb)
             {
                if (jo_next (j) == JO_STRING)
                   url = jo_strdup (j);
-            } else if (!jo_strcmp (j, "address") && !url)
+            } else if (!jo_strcmp (j, "app") && app < 0)
+            {
+               jo_type_t t = jo_next (j);
+               if (t == JO_NUMBER)
+                  app = jo_read_int (j);
+               else if (t == JO_TRUE)
+                  app = 32;
+            } else if (!jo_strcmp (j, "address"))
             {
                jo_type_t t = jo_next (j);
                if (t == JO_NUMBER)
@@ -378,6 +629,13 @@ scan_manifest (manifest_t cb)
                   address = strtoul (a, NULL, 16);
                   free (a);
                }
+            } else if (!jo_strcmp (j, "verify"))
+            {
+               jo_type_t t = jo_next (j);
+               if (t == JO_FALSE)
+                  verify = 0;
+               else if (t == JO_NUMBER)
+                  verify = jo_read_int (j);
             } else
                jo_next (j);
          }
@@ -386,20 +644,14 @@ scan_manifest (manifest_t cb)
             char *fn = NULL;
             if (asprintf (&fn, "%s/%s", sd_dir, filename) >= 0)
             {
-               int f = open (fn, O_RDONLY);
-               if (f >= 0)
-               {
-                  struct stat s = { 0 };
-                  fstat (f, &s);
-                  if (cb)
-                     cb (filename, url, f, address, s.st_size);
-                  close (f);
-               } else if (cb)
-                  cb (filename, url, -1, address, 0);
+               struct stat s = { 0 };
+               if (stat (fn, &s))
+                  s.st_size = 0;
+               cb (fn, url, app, address, s.st_size, verify);
                free (fn);
             }
          } else if (cb)
-            cb (filename, url, -1, address, 0);
+            cb (NULL, url, app, address, 0, verify);
          free (filename);
          free (url);
       }
@@ -407,12 +659,12 @@ scan_manifest (manifest_t cb)
 }
 
 esp_http_client_handle_t client = NULL;
-
 void
-upgrade_check (int f, char *filename, char *url)
+upgrade_check (char *fn, char *url)
 {
-   if (!filename || !url)
+   if (!fn || !url)
       return;
+   char *filename = fn + sizeof (sd_dir);
    if (!client)
    {
       esp_http_client_config_t config = {
@@ -431,8 +683,6 @@ upgrade_check (int f, char *filename, char *url)
       esp_http_client_set_url (client, url);
    char *dl = NULL;
    asprintf (&dl, "%s/DOWNLOAD", sd_dir);
-   char *fn = NULL;
-   asprintf (&fn, "%s/%s", sd_dir, filename);
    esp_err_t e = 0;
    char *h = NULL;
    struct stat s = { 0 };
@@ -440,7 +690,8 @@ upgrade_check (int f, char *filename, char *url)
    {
       struct tm t;
       gmtime_r (&s.st_mtime, &t);
-      asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT", "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
+      asprintf (&h, "%.3s, %02d %.3s %4d %02d:%02d:%02d GMT",
+                "SunMonTueWedThuFriSat" + t.tm_wday * 3, t.tm_mday,
                 "JanFebMarAprMayJunJulAugSepOctNovDec" + t.tm_mon * 3, t.tm_year + 1900, t.tm_hour, t.tm_min, t.tm_sec);
       e = esp_http_client_set_header (client, "If-Modified-Since", h);
    }
@@ -471,8 +722,8 @@ upgrade_check (int f, char *filename, char *url)
             }
             close (o);
             if (!e)
-               unlink (fn);     // fails is not there, duh
-            if (!e && (e = rename (dl, fn)))
+               unlink (fn);     // fails if not there, duh
+            if (!e && (e = rename (dl, fn)))    // Fails if target there, duh
                ESP_LOGE (TAG, "Rename fail %s", fn);
             if (!e)
             {
@@ -486,8 +737,8 @@ upgrade_check (int f, char *filename, char *url)
             ESP_LOGE (TAG, "Status %d %s", status, url);
          else
             ESP_LOGE (TAG, "Unchanged %s %s (%u)", h ? : "", filename, s.st_size);
+         while (esp_http_client_read_response (client, (void *) block, sizeof (block)) > 0);    // Yes, not using flush as seems not to actually work
       }
-      esp_http_client_flush_response (client, &len);
    }
    if (e)
       ESP_LOGE (TAG, "Failed %s: %s", url, esp_err_to_name (e));
@@ -495,27 +746,48 @@ upgrade_check (int f, char *filename, char *url)
       esp_http_client_delete_header (client, "If-Modified-Since");
    free (h);
    free (dl);
-   free (fn);
-}
-
-
-void
-upgrade_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
-{
-   if (!size)
-      manifestsize = -1;
-   else if (manifestsize != 1)
-      manifestsize += size;
-   upgrade_check (f, filename, url);
 }
 
 void
-load_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
    if (!size)
       manifestsize = -1;
-   else if (manifestsize != 1)
+   else if (manifestsize != -1)
       manifestsize += size;
+   if (app < 0)
+      return;
+   int f = open (fn, O_RDONLY);
+   if (f < 0)
+      return;
+   if (lseek (f, app, SEEK_SET) == app)
+   {
+      esp_app_desc_t app;
+      if (read (f, &app, sizeof (app)) == sizeof (app))
+      {
+         if (!manifestapp)
+         {
+            manifestapp = strndup (app.project_name, 32);
+            b.manifestappprefix = 1;
+         }
+         if (!manifestversion)
+            manifestversion = strndup (app.version, 32);
+         if (!manifestbuild)
+         {
+            char temp[20];
+            if (revk_build_date_app (&app, temp))
+               manifestbuild = strdup (temp);
+         }
+      }
+   }
+   close (f);
+}
+
+void
+upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
+{
+   load_cb (fn, url, app, address, size, verify);
+   upgrade_check (fn, url);
 }
 
 const char *
@@ -562,33 +834,13 @@ load_manifest (void)
       free (fn);
       return "Bad JSON";
    }
-   free (manifestid);
-   manifestid = NULL;
-   if (jo_find (j, "id") == JO_STRING)
-      manifestid = jo_strdup (j);
-   manifestsetting = NULL;
-   manifestsettinglen = 0;
-   if (jo_find (j, "setting"))
-   {
-      int p = jo_pos (j);
-      manifestsetting = manifestjson + p;
-      if (p >= 0)
-      {
-         jo_skip (j);
-         int q = jo_pos (j);
-         if (q >= 0)
-         {
-            while (q && manifestsetting[q - 1] <= ' ')
-               q--;             // Messy
-            if (q && manifestsetting[q - 1] == ',')
-               q--;
-            while (q && manifestsetting[q - 1] <= ' ')
-               q--;             // Messy
-            manifestsettinglen = q - p;
-         }
-      }
-   }
-   b.erase = (jo_find (j, "erase") == JO_TRUE);
+   b.manifestappprefix = 0;
+#define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
+#define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
+   fields
+#undef x
+#undef xx
+      b.erase = (jo_find (j, "erase") == JO_TRUE);
    b.nobtn = (jo_find (j, "button") == JO_FALSE);
    b.nocheck = (jo_find (j, "check") == JO_FALSE);
    b.voltage3v3 = 0;
@@ -605,7 +857,7 @@ load_manifest (void)
       if (jo_find (j, "url") == JO_STRING)
       {
          char *url = jo_strdup (j);
-         upgrade_check (f, fn + sizeof (sd_dir), url);
+         upgrade_check (fn, url);
          free (url);
       }
       close (f);
@@ -623,6 +875,7 @@ load_manifest (void)
    {
       close (f);
       free (fn);
+      manifestsize = 0;
       scan_manifest (load_cb);
    }
    if (manifestsize == -1)
@@ -652,32 +905,59 @@ do_erase (void)
 uint32_t flashcount = 0;
 esp_loader_error_t flashe = 0;
 void
-flash_cb (char *filename, char *url, int f, uint32_t address, uint32_t size)
+flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
-   ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
-   if (flashe || f < 0 || !size)
+   if (!fn || flashe || !size)
       return;
-   flashe = esp_loader_flash_start (address, size, BLOCK);
-   if (!flashe)
+   char *filename = fn + sizeof (sd_dir);
+   int try = (verify ? : 1);
+   while (try--)
    {
-      uint32_t p = 0;
-      while (p < size)
+      ESP_LOGE (TAG, "Flash to %06X len %06X %s", address, size, filename);
+      int f = open (fn, O_RDONLY);
+      if (f < 0)
       {
-         set_led (flashcount * 100 / manifestsize, 'K', 'B');
-         uint32_t s = read (f, block, BLOCK);
-         flashe = esp_loader_flash_write (block, s);
-         if (flashe)
-            return;
-         p += s;
-         flashcount += s;
+         ESP_LOGE (TAG, "Missing %s", filename);
+         return;
       }
+      flashe = esp_loader_flash_start (address, size, BLOCK);
+      uint32_t p = 0;
+      if (!flashe)
+      {
+         while (p < size)
+         {
+            set_led (flashcount * 100 / manifestsize, 'K', 'B');
+            uint32_t s = read (f, block, BLOCK);
+            if (s <= 0)
+               break;
+            flashe = esp_loader_flash_write (block, s);
+            if (flashe)
+               break;
+            p += s;
+            flashcount += s;
+         }
+      }
+      close (f);
+      if (!flashe)
+         flashe = esp_loader_flash_finish (false);
+      if (!flashe && verify)
+      {
+         flashe = esp_loader_flash_verify ();   // This does not seem to work if flashing to end of flash!
+         if (flashe)
+         {
+            ESP_LOGE (TAG, "Verify fail %06X len %06X %s", address, size, filename);
+            if (try)
+            {
+               flashcount -= p;
+               flashe = 0;
+               continue;
+            }
+         }
+      }
+      if (flashe)
+         ESP_LOGE (TAG, "Flash fail %06X len %06X at %06X %s (%d)", address, size, p, filename, flashe);
+      break;
    }
-   if (flashe)
-      ESP_LOGE (TAG, "Cannot flash %06X len %06X %s %s", address, size, filename, esp_err_to_name (flashe));
-   if (!flashe)
-      flashe = esp_loader_flash_finish (false);
-   if (!flashe)
-      flashe = esp_loader_flash_verify ();
 }
 
 esp_loader_error_t
@@ -840,9 +1120,12 @@ flash_task (void *arg)
                set_led (manifest * 10, 'O', 'O');
                uint8_t status = STATUS_TIMEOUT;
                if (!b.forceerase && !b.erase && !b.nocheck)
+               {
+                  esp_loader_reset_target ();
                   status = target_status ();
-               if (b.connected && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL))
-                   && status != STATUS_ERROR)
+               }
+               if (b.connected
+                   && (b.forceerase || b.erase || (status != STATUS_PASS && status != STATUS_FAIL)) && status != STATUS_ERROR)
                {
                   ESP_LOGE (TAG, "Bootload");
                   esp_loader_connect_args_t a = ESP_LOADER_CONNECT_DEFAULT ();
@@ -877,23 +1160,23 @@ flash_task (void *arg)
                      status = STATUS_ERROR;
                      ESP_LOGE (TAG, "Flash failed");
                   }
-               }
-               if (b.connected && !b.reload)
-               {
-                  ESP_LOGE (TAG, "Reset");
-                  esp_loader_reset_target ();
-                  status = target_status ();
+                  if (b.connected && !b.reload)
+                  {
+                     ESP_LOGE (TAG, "Reset");
+                     esp_loader_reset_target ();
+                     status = target_status ();
+                  }
                }
                switch (status)
                {
+               case STATUS_MISMATCH:
+                  set_led (10, 'K', 'Y');
+                  break;
                case STATUS_PASS:
                   set_led (100, 'K', 'G');
                   break;
                case STATUS_FAIL:
                   set_led (100, 'K', 'R');
-                  break;
-               case STATUS_TIMEOUT:
-                  set_led (50, 'R', 'G');
                   break;
                case STATUS_LOOPING:
                   set_led (90, 'K', 'R');
@@ -903,6 +1186,13 @@ flash_task (void *arg)
                   break;
                case STATUS_EMPTY:
                   set_led (70, 'K', 'R');
+                  break;
+               case STATUS_ERROR:
+                  b.fileerror = 1;
+                  set_led (60, 'K', 'R');
+                  break;
+               case STATUS_TIMEOUT:
+                  set_led (50, 'R', 'G');
                   break;
                default:
                   set_led (manifest * 10, 'R', 'R');
@@ -948,7 +1238,6 @@ flash_task (void *arg)
 void
 app_main ()
 {
-   ESP_LOGE (TAG, "Started");
    revk_boot (&mqtt_client_callback);
    revk_start ();
    revk_gpio_output (pwr3, 0);
