@@ -1,6 +1,6 @@
 // Generated case design for Flasher/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2025-10-09 11:56:17
+// Generated 2025-10-12 12:30:40
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -30,7 +30,7 @@ datey=0.000000;
 datet=0.500000;
 dateh=3.000000;
 datea=0;
-date="2025-10-09";
+date="2025-10-12";
 datef="OCRB";
 spacing=86.000000;
 pcbwidth=70.000000;
@@ -83,10 +83,10 @@ module part_R10(part=true,hole=false,block=false)
 {
 translate([32.100000,-8.000000,1.600000])rotate([0,0,-90.000000])m1(part,hole,block,casetop); // RevK:R_0201 R_0201_0603Metric (back)
 };
-module SW1(){translate([-4.100000,-8.000000,1.600000])children();}
+module SW1(){translate([-4.100000,-8.000000,1.600000])rotate([0,0,180.000000])children();}
 module part_SW1(part=true,hole=false,block=false)
 {
-translate([-4.100000,-8.000000,1.600000])m6(part,hole,block,casetop); // SW1 (back)
+translate([-4.100000,-8.000000,1.600000])rotate([0,0,180.000000])m6(part,hole,block,casetop); // SW1 (back)
 };
 module V3(){translate([0.000000,15.000000,1.600000])children();}
 module part_V3(part=true,hole=false,block=false)
@@ -507,7 +507,7 @@ if(block)
 {
         hull()
         {
-                b(0,0,.6+0.2,2.8,2.8,1);
+                b(0,0,.6+0.2,3.6+0.2,3.6+0.2,1);
                 translate([0,0,height])cylinder(d=2,h=1,$fn=16);
         }
 }
@@ -928,7 +928,7 @@ module top_body()
 				else hull(){parts_top(part=true);pcb_hulled();}
 				if(topthickness)pcb_hulled(casetop+pcbthickness-topthickness,0);
 			}
-			translate([0,0,margin-height])cylinder(r=margin*2,h=height,$fn=8);
+			translate([0,0,margin-height])cylinder(r=margin,h=height,$fn=8);
 		}
 	}
 	intersection()
@@ -992,7 +992,7 @@ module bottom_body()
 				else hull()parts_bottom(part=true);
 				if(bottomthickness)translate([0,0,bottomthickness-casebottom])pcb_hulled(casebottom+pcbthickness-bottomthickness,0);
 			}
-			translate([0,0,-margin])cylinder(r=margin*2,h=height,$fn=8);
+			translate([0,0,-margin])cylinder(r=margin,h=height,$fn=8);
 		}
 	}
 	intersection()
