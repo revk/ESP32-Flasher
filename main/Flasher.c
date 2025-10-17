@@ -1170,7 +1170,7 @@ flash_task (void *arg)
                switch (status)
                {
                case STATUS_MISMATCH:
-                  set_led (manifest * 10, 'K', 'Y');
+                  set_led (manifest * 10, 'Y', 'Y');
                   break;
                case STATUS_PASS:
                   set_led (100, 'K', 'G');
