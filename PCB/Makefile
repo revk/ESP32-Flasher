@@ -1,6 +1,6 @@
 all: png stl */README.md
 
-stl:    Flasher/FlasherT.stl Flasher/FlasherB.stl
+stl:    Flasher/Flasher[TBC].stl
 
 png:	$(patsubst %.kicad_pcb,%.png,$(wildcard */*.kicad_pcb))
 

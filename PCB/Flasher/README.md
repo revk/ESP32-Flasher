@@ -14,9 +14,9 @@ These files are for use with [KiCAD](https://www.kicad.org).
 
 3D case designs are normally automatically created from the PCB so as to ensure correct details and placement of apertures, etc.
 
-|Design|Bottom|Top|
-|------|------|---|
-|Flasher|<a href='FlasherB.stl'><img src='FlasherB.png' size=15%></a>|<a href='FlasherT.stl'><img src='FlasherT.png' size=15%></a>|
+|Design|Bottom|Top|Combined|
+|------|------|---|--------|
+|Flasher|<a href='FlasherB.stl'><img src='FlasherB.png' size=15%></a>|<a href='FlasherT.stl'><img src='FlasherT.png' size=15%></a>|<a href='FlasherC.stl'><img src='FlasherC.png' size=15%></a>|
 
 ## PCB Images
 
@@ -25,4 +25,4 @@ These files are for use with [KiCAD](https://www.kicad.org).
 
 ---
 
-*Auto generated README.md 2025-10-12T15:28:31*
+*Auto generated README.md 2025-10-22T10:51:59*
