@@ -12,7 +12,7 @@ PCBCase/clean: PCBCase/clean.c
 
 %.stl: %.scad
 	echo "Making $@"
-	/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD $< -o $@ --backend CGAL
+	/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD $< -o $@
 	echo "Made $@"
 
 Flasher/FlasherT.scad: Flasher/Flasher.kicad_pcb PCBCase/case
