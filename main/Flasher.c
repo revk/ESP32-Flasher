@@ -797,6 +797,11 @@ load_manifest (void)
    char *fn = NULL;
    asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
    int f = open (fn, O_RDONLY);
+   if (f < 0 && *manifesturl[manifest])
+   {
+      upgrade_check (fn, manifesturl[manifest]);
+      f = open (fn, O_RDONLY);
+   }
    if (f < 0)
    {
       free (fn);
@@ -854,7 +859,9 @@ load_manifest (void)
    }
    if (!b.checked && !revk_link_down () && time (0) > 1000000000)
    {                            // Can check for new files
-      if (jo_find (j, "url") == JO_STRING)
+      if (*manifesturl[manifest])
+         upgrade_check (fn, manifesturl[manifest]);
+      else if (jo_find (j, "url") == JO_STRING)
       {
          char *url = jo_strdup (j);
          upgrade_check (fn, url);
@@ -1059,6 +1066,11 @@ flash_task (void *arg)
          manifests = 0;
          for (int i = 0; i < 10; i++)
          {
+            if (*manifesturl[i])
+            {
+               manifests |= (1 << i);
+               continue;
+            }
             char *fn;
             asprintf (&fn, "%s/manifest%d.json", sd_dir, i);
             if (!access (fn, R_OK))
@@ -1113,8 +1125,12 @@ flash_task (void *arg)
             if (e)
             {                   // try non JTAG
                config.device_pid = 0;
+               loader_port_esp32_usb_cdc_acm_deinit ();
                e = loader_port_esp32_usb_cdc_acm_init (&config);
-            }
+               if (!e)
+                  ESP_LOGE (TAG, "Serial connect");
+            } else
+               ESP_LOGE (TAG, "JTAG connect");
             if (!e)
             {                   // Connected
                set_led (manifest * 10, 'O', 'O');
@@ -1231,6 +1247,21 @@ flash_task (void *arg)
       usleep (100000);
    }
    vTaskDelete (NULL);
+}
+
+void
+revk_web_extra (httpd_req_t *req, int page)
+{
+   revk_web_setting (req, NULL, "manifest");
+   revk_web_setting_title (req, "URLs for manifest files, overriding the url in the file");
+   for (int i = 0; i < 10; i++)
+   {
+      char name[30];
+      sprintf (name, "manifesturl%d", i + 1);
+      char tag[50];
+      sprintf (tag, "manifest%d.json", i);
+      revk_web_setting (req, tag, name);
+   }
 }
 
 //--------------------------------------------------------------------------------

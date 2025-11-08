@@ -14,9 +14,10 @@ u8	leds	10 .fix	// How many LEDs
 gpio	loop	1	// Loop
 gpio	btn	-12	// Button
 
-u8	manifest	.live	// Selected manifest 0-9
 
 bit	flash.erase	.live	// Always erase first
 bit	flash.verify	.live	// Verify after flash
 bit	flash.always	.live	// Always flash even if apparently flashed
 
+u8	manifest	.live .hide	// Selected manifest
+s	manifesturl	.array=10 .hide	// URL
