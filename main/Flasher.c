@@ -859,14 +859,24 @@ load_manifest (void)
    }
    if (!b.checked && !revk_link_down () && time (0) > 1000000000)
    {                            // Can check for new files
+      char *url = NULL;
+      if (jo_find (j, "url") == JO_STRING)
+         url = jo_strdup (j);
       if (*manifesturl[manifest])
-         upgrade_check (fn, manifesturl[manifest]);
-      else if (jo_find (j, "url") == JO_STRING)
       {
-         char *url = jo_strdup (j);
+         upgrade_check (fn, manifesturl[manifest]);
+         if (url && !strcasecmp (url, manifesturl[manifest]))
+         {                      // Yes case for domain really, but close enough - we are using same URL so remove from settings
+            char tag[20];
+            sprintf (tag, "manifesturl%d", manifest + 1);
+            jo_t j = jo_object_alloc ();
+            jo_string (j, tag, "");
+            revk_setting (j);
+            jo_free (&j);
+         }
+      } else
          upgrade_check (fn, url);
-         free (url);
-      }
+      free (url);
       close (f);
       free (fn);
       manifestsize = 0;
@@ -1253,7 +1263,7 @@ void
 revk_web_extra (httpd_req_t *req, int page)
 {
    revk_web_setting (req, NULL, "manifest");
-   revk_web_setting_title (req, "URLs for manifest files, overriding the url in the file");
+   revk_web_setting_title (req, "URLs for manifest files, overriding the url in the file if different");
    for (int i = 0; i < 10; i++)
    {
       char name[30];
