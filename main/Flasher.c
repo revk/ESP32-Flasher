@@ -23,6 +23,7 @@ static const char TAG[] = "Flasher";
 #include "esp_loader.h"
 #include "esp32_usb_cdc_acm_port.h"
 #include <math.h>
+#include <mbedtls/sha1.h>
 
 struct
 {
@@ -639,6 +640,14 @@ scan_manifest (manifest_t cb)
             } else
                jo_next (j);
          }
+         if (!filename && url)
+         {                      // Use hash
+            unsigned char output[20];
+            mbedtls_sha1 ((const uint8_t *) url, strlen (url), output);
+            if ((filename = malloc (41)))
+               for (int i = 0; i < 20; i++)
+                  sprintf (filename + i * 2, "%02X", output[i]);
+         }
          if (filename)
          {
             char *fn = NULL;
@@ -727,7 +736,7 @@ upgrade_check (char *fn, char *url)
                ESP_LOGE (TAG, "Rename fail %s", fn);
             if (!e)
             {
-               ESP_LOGE (TAG, "Upgraded %s %u", filename, size);
+               ESP_LOGE (TAG, "Upgraded %s %s %u", filename, url, size);
                b.reload = 1;
             }
          }
@@ -736,7 +745,7 @@ upgrade_check (char *fn, char *url)
          if (status != 304)
             ESP_LOGE (TAG, "Status %d %s", status, url);
          else
-            ESP_LOGE (TAG, "Unchanged %s %s (%u)", h ? : "", filename, s.st_size);
+            ESP_LOGE (TAG, "Unchanged %s %s %s (%u)", h ? : "", filename, url, s.st_size);
          while (esp_http_client_read_response (client, (void *) block, sizeof (block)) > 0);    // Yes, not using flush as seems not to actually work
       }
    }

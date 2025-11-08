@@ -97,6 +97,7 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 
 |Field|Meaning|
 |-----|-------|
+|`"name"`|Manifest name for display|
 |`"chip"`|The chip type (see below)|
 |`"voltage"`|Either `3.3` or `5` (default `5`)||
 |`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
@@ -118,8 +119,8 @@ The `"flash"` array is objects with the following...
 |Field|Meaning|
 |-----|-------|
 |`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
-|`"filename"`|The filename on the SD card|
 |`"url"`|The URL for this file|
+|`"filename"`|The filename on the SD card (if omitted, a hash is made of the URL)|
 |`"app"`|This is expected on only one file, and can be `true` for normal ESP application description offset `32`, or can be a number specifying a different offset. If set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
 |`"verify"`|If `false` then do not verify flash, or set to a number of retries|
 
