@@ -1258,40 +1258,30 @@ revk_web_extra (httpd_req_t *req, int page)
    {
       char name[30];
       sprintf (name, "manifesturl%d", i + 1);
-      char tag[50];
+      char tag[30];
       sprintf (tag, "manifest%d.json", i);
-      revk_web_setting (req, tag, name);
-   }
-}
+   revk_web_setting_edit (req, tag, name, (manifests & (1 << i) ? "From file" : NULL);}
+                          }
 
 //--------------------------------------------------------------------------------
 // Main
-void
-app_main ()
-{
-   revk_boot (&mqtt_client_callback);
-   revk_start ();
-   revk_gpio_output (pwr3, 0);
-   revk_gpio_output (pwr5, 0);
-   {                            // LED
-      led_strip_config_t strip_config = {
-         .strip_gpio_num = led.num,
-         .max_leds = 11,
-         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
-         .led_model = LED_MODEL_WS2812, // LED strip model
-         .flags.invert_out = led.invert,
-      };
-      led_strip_rmt_config_t rmt_config = {
-         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
-         .resolution_hz = 10 * 1000 * 1000,     // 10 MHz
-      };
+                          void app_main ()
+                          {
+                          revk_boot (&mqtt_client_callback); revk_start (); revk_gpio_output (pwr3, 0); revk_gpio_output (pwr5, 0);
+                          {     // LED
+                          led_strip_config_t strip_config = {
+                          .strip_gpio_num = led.num,
+                          .max_leds = 11,
+                          .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
+                          .led_model = LED_MODEL_WS2812,        // LED strip model
+                          .flags.invert_out = led.invert,
+                          }; led_strip_rmt_config_t rmt_config = {
+                          .clk_src = RMT_CLK_SRC_DEFAULT,       // different clock source can lead to different power consumption
+                          .resolution_hz = 10 * 1000 * 1000,    // 10 MHz
+                          };
 #ifdef	CONFIG_IDF_TARGET_ESP32S3
-      rmt_config.flags.with_dma = true;
+                          rmt_config.flags.with_dma = true;
 #endif
-      REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
-      revk_task ("led", led_task, NULL, 4);
-   }
-   revk_gpio_input (btn);
-   revk_task ("btn", btn_task, NULL, 4);
-   revk_task ("flash", flash_task, NULL, 16);
-}
+                          REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
+                          revk_task ("led", led_task, NULL, 4);}
+                          revk_gpio_input (btn); revk_task ("btn", btn_task, NULL, 4); revk_task ("flash", flash_task, NULL, 16);}
