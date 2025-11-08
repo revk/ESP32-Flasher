@@ -120,7 +120,7 @@ The `"flash"` array is objects with the following...
 |-----|-------|
 |`"address"`|The address to which it is to be flashed - can be a number, or a string. If a string then assumed to be hex. Default 0|
 |`"url"`|The URL for this file|
-|`"filename"`|The filename on the SD card (if omitted, a hash is made of the URL)|
+|`"filename"`|The filename on the SD card (if omitted, a hash is made of the URL and tail end of URL)|
 |`"app"`|This is expected on only one file, and can be `true` for normal ESP application description offset `32`, or can be a number specifying a different offset. If set then do not include `"version"` and `"build"` at top level - you can also omit `"id"` at top level.|
 |`"verify"`|If `false` then do not verify flash, or set to a number of retries|
 

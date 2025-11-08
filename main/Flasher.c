@@ -642,11 +642,22 @@ scan_manifest (manifest_t cb)
          }
          if (!filename && url)
          {                      // Use hash
+            const char *leaf = strrchr (url, '/');
+            if (leaf && strlen (leaf) > 200)
+               leaf = strrchr (url, '.');
+            else if (leaf)
+               leaf++;
+            if (!leaf || strlen (leaf) > 200)
+               leaf = "";
             unsigned char output[20];
             mbedtls_sha1 ((const uint8_t *) url, strlen (url), output);
-            if ((filename = malloc (41)))
+            if ((filename = malloc (40 + 1 + strlen (leaf) + 1)))
+            {
                for (int i = 0; i < 20; i++)
                   sprintf (filename + i * 2, "%02X", output[i]);
+               filename[40] = '-';
+               strcpy (filename + 41, leaf);
+            }
          }
          if (filename)
          {
