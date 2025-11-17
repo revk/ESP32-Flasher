@@ -601,7 +601,7 @@ scan_manifest (manifest_t cb)
          char *filename = NULL;
          char *url = NULL;
          int app = -1;
-         uint8_t verify = 1;
+         uint8_t verify = flashverify;
          while (jo_next (j) == JO_TAG)
          {
             if (!jo_strcmp (j, "filename") && !filename)
@@ -635,6 +635,8 @@ scan_manifest (manifest_t cb)
                jo_type_t t = jo_next (j);
                if (t == JO_FALSE)
                   verify = 0;
+               else if (t == JO_TRUE)
+                  verify = 1;
                else if (t == JO_NUMBER)
                   verify = jo_read_int (j);
             } else
@@ -865,9 +867,16 @@ load_manifest (void)
    fields
 #undef x
 #undef xx
-      b.erase = (jo_find (j, "erase") == JO_TRUE);
-   b.nobtn = (jo_find (j, "button") == JO_FALSE);
-   b.nocheck = (jo_find (j, "check") == JO_FALSE);
+      jo_type_t t;
+   b.erase = flasherase;
+   b.nocheck = 1 - flashcheck;
+   b.nobtn = 1 - flashbutton;
+   if ((t = jo_find (j, "erase")) >= JO_TRUE)
+      b.erase = (t == JO_TRUE ? 1 : 0);
+   if ((t = jo_find (j, "button")) >= JO_TRUE)
+      b.nobtn = (t == JO_TRUE ? 0 : 1);
+   if ((t = jo_find (j, "check")) >= JO_TRUE)
+      b.nocheck = (t == JO_TRUE ? 0 : 1);
    b.voltage3v3 = 0;
    if (jo_find (j, "voltage") == JO_NUMBER)
    {

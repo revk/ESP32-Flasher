@@ -100,8 +100,8 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"name"`|Manifest name for display|
 |`"chip"`|The chip type (see below)|
 |`"voltage"`|Either `3.3` or `5` (default `5`)||
-|`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
 |`"check"`|If `false` then goes direct to flashing without checking first|
+|`"erase"`|If `true` then a full erase is always done first regardless of state of target device|
 |`"button"`|If `false` then button erase function is disabled|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
