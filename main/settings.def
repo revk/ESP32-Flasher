@@ -1,3 +1,5 @@
+#define	MANIFESTS	10
+
 gpio	sd.dat2	2	// DAT2
 gpio	sd.dat3	3	// DAT3
 gpio	sd.cmd	4	// CMD
@@ -15,7 +17,7 @@ gpio	loop	1	// Loop
 gpio	btn	-12	// Button
 
 u8	manifest	.live .hide	// Selected manifest
-s	manifesturl	.array=10 .hide	// URL
+s	manifesturl	.array=MANIFESTS .hide	// URL
 
 bit	flash.button	true .live	// Default for "button" (erase) if not in manifest
 bit	flash.check	true .live	// Default for "check" if not in manifest

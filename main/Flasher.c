@@ -53,7 +53,6 @@ uint32_t badusb = 0;            // Last devices 0 even
 
 uint32_t flashsize = 0;         // Found flash size
 
-char *manifestjson = NULL;      // Loaded manifest JSON
 uint32_t manifestsize = 0;      // Total flash bytes
 jo_t j = NULL;                  // Parsed manifest JSON
 #define	fields				\
@@ -108,7 +107,7 @@ led_task (void *arg)
          uint8_t p = progress;
          if (f != t && p < 5)
             p = 5;              // don't do all off
-         for (int i = 0; i < 10; i++)
+         for (int i = 0; i < MANIFESTS; i++)
          {
             uint8_t l = p;
             if (l > 10)
@@ -123,13 +122,13 @@ led_task (void *arg)
                                     gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
          if (b.fileerror && !(tick & 1))
-            revk_led (strip, 10, 255, revk_rgb ('R'));
+            revk_led (strip, MANIFESTS, 255, revk_rgb ('R'));
          else
-            revk_led (strip, 10, 255, revk_rgb (ledsd));
+            revk_led (strip, MANIFESTS, 255, revk_rgb (ledsd));
          REVK_ERR_CHECK (led_strip_refresh (strip));
          usleep (100000);
       }
-      for (int i = 0; i < 11; i++)
+      for (int i = 0; i < MANIFESTS + 1; i++)
          revk_led (strip, i, 0, 0);
       REVK_ERR_CHECK (led_strip_refresh (strip));
    }
@@ -169,7 +168,7 @@ btn_task (void *arg)
                do
                {
                   m++;
-                  if (m == 10)
+                  if (m >= MANIFESTS)
                      m = 0;
                }
                while (!(manifests & (1 << m)));
@@ -578,11 +577,7 @@ chip_info (void)
 void
 close_manifest (void)
 {
-   if (!manifestjson)
-      return;
    jo_free (&j);
-   free (manifestjson);
-   manifestjson = NULL;
 }
 
 typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify);
@@ -681,12 +676,13 @@ scan_manifest (manifest_t cb)
 }
 
 esp_http_client_handle_t client = NULL;
+
 void
-upgrade_check (char *fn, char *url)
+upgrade_check (const char *fn, char *url)
 {
    if (!fn || !url)
       return;
-   char *filename = fn + sizeof (sd_dir);
+   const char *filename = fn + sizeof (sd_dir);
    if (!client)
    {
       esp_http_client_config_t config = {
@@ -813,54 +809,72 @@ upgrade_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8
 }
 
 const char *
-load_manifest (void)
-{
-   close_manifest ();
-   char *fn = NULL;
-   asprintf (&fn, "%s/manifest%d.json", sd_dir, manifest);
+manifest_fn (uint8_t m)
+{                               // Get manifest filename (static)
+   static char temp[50];
+   snprintf (temp, sizeof (temp), "%s/manifest%d.json", sd_dir, m);
+   return temp;
+}
+
+jo_t
+read_manifest (uint8_t m)
+{                               // Read a manifest
+   const char *fn = manifest_fn (m);
    int f = open (fn, O_RDONLY);
-   if (f < 0 && *manifesturl[manifest])
+   if (f < 0 && *manifesturl[m])
    {
-      upgrade_check (fn, manifesturl[manifest]);
+      upgrade_check (fn, manifesturl[m]);
       f = open (fn, O_RDONLY);
    }
    if (f < 0)
    {
-      free (fn);
-      return "Failed to open";
+      ESP_LOGE (TAG, "Manifest %d not found", m);
+      return NULL;
    }
    struct stat s = { 0 };
    fstat (f, &s);
    if (!s.st_size || s.st_size > 10000)
    {                            // Silly
       close (f);
-      free (fn);
-      return "Silly size";
+      ESP_LOGE (TAG, "Manifest %d bad size %ld", m, s.st_size);
+      return NULL;
    }
-   manifestjson = malloc (s.st_size);
-   if (!manifestjson)
+   char *mem = malloc (s.st_size);
+   if (!mem)
    {
       close (f);
-      free (fn);
-      return "Malloc fail";
+      return NULL;
    }
-   if (read (f, manifestjson, s.st_size) != s.st_size)
+   if (read (f, mem, s.st_size) != s.st_size)
    {
       close (f);
-      free (manifestjson);
-      manifestjson = NULL;
-      free (fn);
-      return "Read fail";
+      free (mem);
+      return NULL;
    }
-   j = jo_parse_mem (manifestjson, s.st_size);
+   close (f);
+   jo_t j = jo_parse_malloc (mem, s.st_size);
    if (!j)
+      return NULL;
+   jo_skip (j);
+   int pos = 0;
+   const char *e = jo_error (j, &pos);
+   if (e)
    {
-      close (f);
-      free (manifestjson);
-      manifestjson = NULL;
-      free (fn);
-      return "Bad JSON";
+      ESP_LOGE (TAG, "Manifest %d failed: %s at %d", m, e, pos);
+      jo_free (&j);
+      return NULL;
    }
+   jo_rewind (j);
+   return j;
+}
+
+const char *
+load_manifest (void)
+{
+   close_manifest ();
+   j = read_manifest (manifest);
+   if (!j)
+      return "Cannot load manifest";
    b.manifestappprefix = 0;
 #define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
 #define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
@@ -894,6 +908,7 @@ load_manifest (void)
       char *url = NULL;
       if (jo_find (j, "url") == JO_STRING)
          url = jo_strdup (j);
+      const char *fn = manifest_fn (manifest);
       if (*manifesturl[manifest])
       {
          upgrade_check (fn, manifesturl[manifest]);
@@ -910,7 +925,6 @@ load_manifest (void)
          upgrade_check (fn, url);
       free (url);
       close (f);
-      free (fn);
       manifestsize = 0;
       scan_manifest (upgrade_cb);
       if (client)
@@ -923,7 +937,6 @@ load_manifest (void)
    } else
    {
       close (f);
-      free (fn);
       manifestsize = 0;
       scan_manifest (load_cb);
    }
@@ -1106,17 +1119,19 @@ flash_task (void *arg)
       set_led (manifest * 10, 'Y', 'Y');
       {                         // Check manifests
          manifests = 0;
-         for (int i = 0; i < 10; i++)
+         for (int i = 0; i < MANIFESTS; i++)
          {
             if (*manifesturl[i])
             {
                manifests |= (1 << i);
                continue;
             }
-            char *fn;
-            asprintf (&fn, "%s/manifest%d.json", sd_dir, i);
-            if (!access (fn, R_OK))
+            jo_t j = read_manifest (i);
+            if (j)
+            {
                manifests |= (1 << i);
+               jo_free (&j);
+            }
          }
       }
       {                         // Manifest
@@ -1296,7 +1311,7 @@ revk_web_extra (httpd_req_t *req, int page)
 {
    revk_web_setting (req, NULL, "manifest");
    revk_web_setting_title (req, "URLs for manifest files, overriding the url in the file if different");
-   for (int i = 0; i < 10; i++)
+   for (int i = 0; i < MANIFESTS; i++)
    {
       char name[30];
       sprintf (name, "manifesturl%d", i + 1);
@@ -1318,7 +1333,7 @@ app_main ()
    {                            // LED
       led_strip_config_t strip_config = {
          .strip_gpio_num = led.num,
-         .max_leds = 11,
+         .max_leds = MANIFESTS + 1,
          .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
          .led_model = LED_MODEL_WS2812, // LED strip model
          .flags.invert_out = led.invert,
