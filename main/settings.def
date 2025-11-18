@@ -21,3 +21,4 @@ bit	flash.button	true .live	// Default for "button" (erase) if not in manifest
 bit	flash.check	true .live	// Default for "check" if not in manifest
 bit	flash.erase	false .live	// Default for (always) "erase" if not in manifest
 u8	flash.verify	1 .live	// Default for "verify" if not in manifest
+u8	flash.wait	10 .unit="s"	// Default for (ATE) "wait" if not in manifest

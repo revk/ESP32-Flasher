@@ -40,6 +40,7 @@ struct
    uint8_t checked:1;           // Upgrade checked
    uint8_t manifestappprefix:1; // manifestapp is prefix
 } volatile b;
+uint8_t atetimeout = 0;
 uint16_t manifests = 0;         // Bit map of manifests on SD
 uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
@@ -300,8 +301,7 @@ enum
    STATUS_TIMEOUT,              // Not looping but not pass/fail
 } target_status (void)
 {
-#define	WAIT	10
-   uint32_t to = uptime () + WAIT;
+   uint32_t to = uptime () + atetimeout;
    uint8_t rst = 0;
    int8_t ate = 0;
    int8_t match = 0;
@@ -429,7 +429,7 @@ enum
             p = 0;
          } else if (!strncmp (buf, "SPIWP:", 6))
          {
-            to = uptime () + WAIT;
+            to = uptime () + atetimeout;
             ok = !manifestsetting;
             if (rst++ > 5)
                return STATUS_LOOPING;
@@ -467,7 +467,7 @@ enum
                   status = STATUS_LOOPING;
                else
                {
-                  to = uptime () + WAIT;
+                  to = uptime () + atetimeout;
                   if (t == JO_STRING && manifestapp
                       && (b.manifestappprefix ? jo_strncmp (j, manifestapp, strlen (manifestapp)) : jo_strcmp (j, manifestapp)))
                   {
@@ -871,12 +871,15 @@ load_manifest (void)
    b.erase = flasherase;
    b.nocheck = 1 - flashcheck;
    b.nobtn = 1 - flashbutton;
+   atetimeout = flashwait;
    if ((t = jo_find (j, "erase")) >= JO_TRUE)
       b.erase = (t == JO_TRUE ? 1 : 0);
    if ((t = jo_find (j, "button")) >= JO_TRUE)
       b.nobtn = (t == JO_TRUE ? 0 : 1);
    if ((t = jo_find (j, "check")) >= JO_TRUE)
       b.nocheck = (t == JO_TRUE ? 0 : 1);
+   if ((t = jo_find (j, "wait")) == JO_NUMBER)
+      atetimeout = jo_read_int (j);
    b.voltage3v3 = 0;
    if (jo_find (j, "voltage") == JO_NUMBER)
    {
