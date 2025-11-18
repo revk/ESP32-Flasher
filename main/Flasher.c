@@ -924,7 +924,6 @@ load_manifest (void)
       } else
          upgrade_check (fn, url);
       free (url);
-      close (f);
       manifestsize = 0;
       scan_manifest (upgrade_cb);
       if (client)
@@ -936,7 +935,6 @@ load_manifest (void)
          b.checked = 1;
    } else
    {
-      close (f);
       manifestsize = 0;
       scan_manifest (load_cb);
    }
