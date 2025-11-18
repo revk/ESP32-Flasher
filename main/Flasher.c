@@ -25,6 +25,8 @@ static const char TAG[] = "Flasher";
 #include <math.h>
 #include <mbedtls/sha1.h>
 
+static httpd_handle_t webserver = NULL;
+
 struct
 {
    uint8_t die:1;               // Shutdown
@@ -54,7 +56,11 @@ uint32_t badusb = 0;            // Last devices 0 even
 uint32_t flashsize = 0;         // Found flash size
 
 uint32_t manifestsize = 0;      // Total flash bytes
-jo_t j = NULL;                  // Parsed manifest JSON
+char *mname[MANIFESTS];         // Manifest name (malloc)
+char *murl[MANIFESTS];          // Manifest url (malloc)
+
+jo_t j = NULL;                  // Parsed manifest JSON (yeh, sorry)
+
 #define	fields				\
 	x (app);			\
 	x (version);			\
@@ -827,10 +833,7 @@ read_manifest (uint8_t m)
       f = open (fn, O_RDONLY);
    }
    if (f < 0)
-   {
-      ESP_LOGE (TAG, "Manifest %d not found", m);
       return NULL;
-   }
    struct stat s = { 0 };
    fstat (f, &s);
    if (!s.st_size || s.st_size > 10000)
@@ -872,9 +875,17 @@ const char *
 load_manifest (void)
 {
    close_manifest ();
+   free (mname[manifest]);
+   mname[manifest] = NULL;
+   free (murl[manifest]);
+   murl[manifest] = NULL;
    j = read_manifest (manifest);
    if (!j)
       return "Cannot load manifest";
+   if (jo_find (j, "name"))
+      mname[manifest] = jo_strdup (j);
+   if (jo_find (j, "url"))
+      murl[manifest] = jo_strdup (j);
    b.manifestappprefix = 0;
 #define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
 #define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
@@ -912,7 +923,7 @@ load_manifest (void)
       if (*manifesturl[manifest])
       {
          upgrade_check (fn, manifesturl[manifest]);
-         if (url && !strcasecmp (url, manifesturl[manifest]))
+         if (url && !strcasecmp (strchr (url, ':') ? : url, strchr (manifesturl[manifest], ':') ? : manifesturl[manifest]))
          {                      // Yes case for domain really, but close enough - we are using same URL so remove from settings
             char tag[20];
             sprintf (tag, "manifesturl%d", manifest + 1);
@@ -1120,14 +1131,15 @@ flash_task (void *arg)
          for (int i = 0; i < MANIFESTS; i++)
          {
             if (*manifesturl[i])
-            {
                manifests |= (1 << i);
-               continue;
-            }
             jo_t j = read_manifest (i);
             if (j)
             {
                manifests |= (1 << i);
+               if (jo_find (j, "name"))
+                  mname[i] = jo_strdup (j);
+               if (jo_find (j, "url"))
+                  murl[i] = jo_strdup (j);
                jo_free (&j);
             }
          }
@@ -1319,6 +1331,64 @@ revk_web_extra (httpd_req_t *req, int page)
    }
 }
 
+static void
+register_uri (const httpd_uri_t *uri_struct)
+{
+   esp_err_t res = httpd_register_uri_handler (webserver, uri_struct);
+   if (res != ESP_OK)
+   {
+      ESP_LOGE (TAG, "Failed to register %s, error code %d", uri_struct->uri, res);
+   }
+}
+
+static void
+register_get_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
+{
+   httpd_uri_t uri_struct = {
+      .uri = uri,
+      .method = HTTP_GET,
+      .handler = handler,
+   };
+   register_uri (&uri_struct);
+}
+
+static esp_err_t
+web_root (httpd_req_t *req)
+{
+   static char *temp = NULL;
+   size_t len = httpd_req_get_url_query_len (req);
+   char q[3] = { };
+   if (len && len <= 2)
+   {
+      httpd_req_get_url_query_str (req, q, sizeof (q));
+      jo_t j = jo_object_alloc ();
+      jo_int (j, "manifest", atoi (q));
+      revk_setting (j);
+      jo_free (&j);
+      b.checked = 0;
+      b.reload = 1;
+   }
+   int i;
+   revk_web_head (req, hostname);
+   revk_web_send (req, "<h1>%s</h1><table border=1><tr><th></th><th>Name</th><th>URL</th>", hostname);
+   for (i = 0; i < MANIFESTS && !*manifesturl[i]; i++);
+   if (i < MANIFESTS)
+      revk_web_send (req, "<th>Override</th>");
+   revk_web_send (req, "</tr>");
+   for (int i = 0; i < MANIFESTS; i++)
+      if (manifests & (1 << i))
+      {
+         revk_web_send (req, "<tr%s><td><a href='?%d'>%d</a></td>", manifest == i ? " style='background:yellow;'" : "", i, i);
+         revk_web_send (req, "<td>%s</td>", mname[i] ? revk_web_safe (&temp, mname[i]) : "-");
+         revk_web_send (req, "<td>%s</td>", murl[i] ? revk_web_safe (&temp, murl[i]) : "-");
+         if (*manifesturl[i])
+            revk_web_send (req, "<td>%s</td>", revk_web_safe (&temp, manifesturl[i]));
+         revk_web_send (req, "</tr>");
+      }
+   revk_web_send (req, "</table>");
+   return revk_web_foot (req, 0, 1, NULL);
+}
+
 //--------------------------------------------------------------------------------
 // Main
 void
@@ -1326,6 +1396,19 @@ app_main ()
 {
    revk_boot (&mqtt_client_callback);
    revk_start ();
+   memset (mname, 0, sizeof (mname));
+   memset (murl, 0, sizeof (murl));
+   // Web interface
+   httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
+   config.stack_size += 4096;   // Being on the safe side
+   // When updating the code below, make sure this is enough
+   // Note that we're also adding revk's own web config handlers
+   config.max_uri_handlers = 1 + revk_num_web_handlers ();
+   if (!httpd_start (&webserver, &config))
+   {
+      revk_web_settings_add (webserver);
+      register_get_uri ("/", web_root);
+   }
    revk_gpio_output (pwr3, 0);
    revk_gpio_output (pwr5, 0);
    {                            // LED
