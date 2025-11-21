@@ -592,7 +592,10 @@ void
 scan_manifest (manifest_t cb)
 {
    if (!j)
+   {
+      ESP_LOGE (TAG, "Scan manifest not loaded");
       return;
+   }
    jo_rewind (j);
    if (jo_find (j, "flash") == JO_ARRAY)
    {
@@ -1287,7 +1290,7 @@ flash_task (void *arg)
                      usleep (100000);
                }
             }
-            close_manifest ();
+            //close_manifest ();
             loader_port_esp32_usb_cdc_acm_deinit ();
          }
          set_led (0, 'K', 'K');
