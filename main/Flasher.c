@@ -87,8 +87,6 @@ const char sd_dir[] = "/sd";
 #endif
 
 
-led_strip_handle_t strip = NULL;
-
 const char *
 mqtt_client_callback (int client, const char *prefix, const char *target, const char *suffix, jo_t j)
 {
@@ -102,6 +100,8 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
 void
 led_task (void *arg)
 {
+   led_strip_t strip = NULL;
+   led_strip (&strip, led.num, led.invert, MANIFESTS + 1, 3, LED_GRB);
    if (strip)
    {
       uint8_t tick = 0;
@@ -120,23 +120,22 @@ led_task (void *arg)
                l = 10;
             p -= l;
             if ((b.fileerror && (tick & 1)) || (f == t && i != progress / 10))
-               led_strip_set_pixel (strip, i, 0, 0, 0); // Off
+               led_set (strip, i, 0, 0, 0);     // Off
             else
-               led_strip_set_pixel (strip, i,   //
-                                    gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10],     //
-                                    gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],       //
-                                    gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
+               led_set (strip, i,       //
+                        gamma8[l * ((t >> 16) & 255) / 10 + (10 - l) * ((f >> 16) & 255) / 10], //
+                        gamma8[l * ((t >> 8) & 255) / 10 + (10 - l) * ((f >> 8) & 255) / 10],   //
+                        gamma8[l * ((t >> 0) & 255) / 10 + (10 - l) * ((f >> 0) & 255) / 10]);
          }
          if (b.fileerror && !(tick & 1))
             revk_led (strip, MANIFESTS, 255, revk_rgb ('R'));
          else
             revk_led (strip, MANIFESTS, 255, revk_rgb (ledsd));
-         REVK_ERR_CHECK (led_strip_refresh (strip));
+         led_send ();
          usleep (100000);
       }
-      for (int i = 0; i < MANIFESTS + 1; i++)
-         revk_led (strip, i, 0, 0);
-      REVK_ERR_CHECK (led_strip_refresh (strip));
+      led_clear (strip);
+      led_send ();
    }
    vTaskDelete (NULL);
 }
@@ -1414,24 +1413,7 @@ app_main ()
    }
    revk_gpio_output (pwr3, 0);
    revk_gpio_output (pwr5, 0);
-   {                            // LED
-      led_strip_config_t strip_config = {
-         .strip_gpio_num = led.num,
-         .max_leds = MANIFESTS + 1,
-         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
-         .led_model = LED_MODEL_WS2812, // LED strip model
-         .flags.invert_out = led.invert,
-      };
-      led_strip_rmt_config_t rmt_config = {
-         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
-         .resolution_hz = 10 * 1000 * 1000,     // 10 MHz
-      };
-#ifdef	CONFIG_IDF_TARGET_ESP32S3
-      rmt_config.flags.with_dma = true;
-#endif
-      REVK_ERR_CHECK (led_strip_new_rmt_device (&strip_config, &rmt_config, &strip));
-      revk_task ("led", led_task, NULL, 4);
-   }
+   revk_task ("led", led_task, NULL, 4);
    revk_gpio_input (btn);
    revk_task ("btn", btn_task, NULL, 4);
    revk_task ("flash", flash_task, NULL, 16);
