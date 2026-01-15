@@ -160,13 +160,16 @@ btn_task (void *arg)
       {
          if (revk_gpio_get (btn))
          {
+            ESP_LOGE (TAG, "Button press");
             if (b.connected)
             {
                if (!b.nobtn)
                {
+                  ESP_LOGE (TAG, "Button force erase");
                   b.forceerase = 1;
                   b.reload = 1;
-               }
+               } else
+                  ESP_LOGE (TAG, "Button ignore");
             } else if (manifests)
             {
                uint8_t m = manifest;
@@ -179,6 +182,7 @@ btn_task (void *arg)
                while (!(manifests & (1 << m)));
                if (m != manifest)
                {
+                  ESP_LOGE (TAG, "New manifest %d", m);
                   jo_t j = jo_object_alloc ();
                   jo_int (j, "manifest", m);
                   revk_setting (j);
@@ -314,7 +318,7 @@ enum
    uint32_t p = 0;
    jo_t j = NULL;
    uint8_t status = STATUS_TIMEOUT;
-   while (uptime () <= to && status == STATUS_TIMEOUT)
+   while (uptime () <= to && status == STATUS_TIMEOUT && !b.forceerase)
    {
       uint8_t c;
       esp_loader_error_t e = loader_port_read (&c, 1, 100);
@@ -895,9 +899,9 @@ load_manifest (void)
 #undef x
 #undef xx
       jo_type_t t;
-   b.erase = flasherase;
-   b.nocheck = 1 - flashcheck;
-   b.nobtn = 1 - flashbutton;
+   b.erase = (flasherase ? 1 : 0);
+   b.nocheck = (flashcheck ? 0 : 1);
+   b.nobtn = (flashbutton ? 0 : 1);
    atetimeout = flashwait;
    if ((t = jo_find (j, "erase")) >= JO_TRUE)
       b.erase = (t == JO_TRUE ? 1 : 0);
@@ -1282,10 +1286,10 @@ flash_task (void *arg)
                default:
                   set_led (manifest * 10, 'R', 'R');
                }
-               if (b.connected && !b.reload)
+               if (!b.forceerase && b.connected && !b.reload)
                {
                   ESP_LOGE (TAG, "Wait disconnect");
-                  while (revk_gpio_get (sdcd) && b.connected && !b.reload && !revk_shutting_down (NULL))
+                  while (revk_gpio_get (sdcd) && b.connected && !b.reload && !b.forceerase && !revk_shutting_down (NULL))
                      usleep (100000);
                }
             }
