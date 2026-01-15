@@ -101,7 +101,7 @@ void
 led_task (void *arg)
 {
    led_strip_t strip = NULL;
-   led_strip (&strip, led.num, led.invert, MANIFESTS + 1, 3, LED_GRB);
+   led_strip (&strip, led, MANIFESTS + 1, 3, LED_GRB);
    if (strip)
    {
       uint8_t tick = 0;
