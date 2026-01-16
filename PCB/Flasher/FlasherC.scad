@@ -1,13 +1,13 @@
 // Generated case design for Flasher/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2025-10-22 10:39:55
+// Generated 2026-01-16 13:12:41
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
 //
 
 // Globals
-margin=0.250000;
+margin=0.200000;
 lip=3.000000;
 lipa=0;
 lipt=2;
@@ -32,6 +32,13 @@ dateh=3.000000;
 datea=0;
 date="2025-10-22";
 datef="OCRB";
+logox=0.000000;
+logoy=0.000000;
+logot=0.500000;
+logoh=10.000000;
+logoa=0;
+logo="A";
+logof="AJK";
 spacing=86.000000;
 pcbwidth=70.000000;
 function pcbwidth()=70.000000;
@@ -410,7 +417,7 @@ part_C4(part,hole,block);
 part_J3(part,hole,block);
 }
 
-parts_top=26;
+parts_top=58;
 module J1(){translate([16.000000,2.000000,0.000000])rotate([0,0,180.000000])rotate([180,0,0])children();}
 module part_J1(part=true,hole=false,block=false)
 {
@@ -1044,5 +1051,13 @@ module datecode()
 		cylinder(d1=datet,d2=0,h=datet,$fn=6);
 	}
 }
-translate([0,0,casebottom+casetop+pcbthickness+0.1])rotate([180,0,0])top();
-difference(){bottom();datecode();}
+
+module logocode()
+{
+	minkowski()
+	{
+		translate([logox,logoy,-1])rotate(logoa)scale([-1,1])linear_extrude(1)text(logo,size=logoh,halign="center",valign="center",font=logof);
+		cylinder(d1=logot,d2=0,h=logot,$fn=6);
+	}
+}
+translate([0,0,casebottom+casetop+pcbthickness+0.1])rotate([180,0,0])difference(){top();logocode();}difference(){bottom();datecode();}
