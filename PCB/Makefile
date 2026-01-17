@@ -18,7 +18,7 @@ PCBCase/clean: PCBCase/clean.c
 Flasher/FlasherT.scad: Flasher/Flasher.kicad_pcb PCBCase/case
 	PCBCase/case -o $@ $< --edge=2 --bottom=3 --top=10 --pcb=2 --two-file
 
-Flasher2/FlasherT.scad: Flasher/Flasher.kicad_pcb PCBCase/case
+Flasher2/FlasherT.scad: Flasher2/Flasher.kicad_pcb PCBCase/case
 	PCBCase/case -o $@ $< --edge=2 --bottom=3 --top=10 --pcb=2 --two-file
 
 %.png:	%.kicad_pcb PCBCase/clean PCBCase/render
