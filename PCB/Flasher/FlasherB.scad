@@ -1,6 +1,6 @@
 // Generated case design for Flasher/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-16 13:12:41
+// Generated 2026-01-18 13:50:35
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -13,7 +13,7 @@ lipa=0;
 lipt=2;
 casewall=3.000000;
 casebottom=3.000000;
-casetop=10.000000;
+casetop=12.000000;
 bottomthickness=0.000000;
 topthickness=0.000000;
 fit=0.000000;
@@ -39,6 +39,13 @@ logoh=10.000000;
 logoa=0;
 logo="A";
 logof="AJK";
+namex=0.000000;
+namey=-10.000000;
+namet=0.500000;
+nameh=10.000000;
+namea=0;
+name="Flasher";
+namef="OCRB";
 spacing=86.000000;
 pcbwidth=70.000000;
 function pcbwidth()=70.000000;
