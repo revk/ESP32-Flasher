@@ -1,6 +1,6 @@
 // Generated case design for Flasher2/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-18 13:09:47
+// Generated 2026-01-18 13:41:54
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -32,11 +32,11 @@ dateh=3.000000;
 datea=0;
 date="2026-01-18";
 datef="OCRB";
-logox=0.000000;
-logoy=0.000000;
+logox=-22.000000;
+logoy=-18.000000;
 logot=0.500000;
 logoh=10.000000;
-logoa=0;
+logoa=180;
 logo="A";
 logof="AJK";
 spacing=75.000000;
@@ -203,10 +203,10 @@ module part_C14(part=true,hole=false,block=false)
 {
 translate([22.900000,19.700000,1.600000])rotate([0,0,-90.000000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
 };
-module D11(){translate([13.000000,-23.500000,1.600000])rotate([0,0,-90.000000])children();}
+module D11(){translate([10.000000,-24.000000,1.600000])rotate([0,0,-90.000000])children();}
 module part_D11(part=true,hole=false,block=false)
 {
-translate([13.000000,-23.500000,1.600000])rotate([0,0,-90.000000])m13(part,hole,block,casetop); // D11
+translate([10.000000,-24.000000,1.600000])rotate([0,0,-90.000000])m13(part,hole,block,casetop); // D11
 };
 module D2(){translate([6.000000,21.500000,1.600000])rotate([0,0,-90.000000])children();}
 module part_D2(part=true,hole=false,block=false)
@@ -618,8 +618,8 @@ module m9(part=false,hole=false,block=false,height)
 { // RevK:LCD2 LCDHeader
 if(hole)
 {
-	b(0,0,0,6,20,height+1);
-	b(-21,0,0,20,20,height+1);
+	b(0,0,0,6,20,6.2);
+	b(-21,0,0,20,20,6.2);
 }
 }
 
