@@ -5964,7 +5964,7 @@
 		(at 74.295 82.55)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "4a443f0a-04b0-454f-aa93-10cb61aafdf8")
+		(uuid "48f221ed-c1d6-454e-9cc5-57be5031a045")
 	)
 	(junction
 		(at 67.31 112.395)
@@ -6487,6 +6487,16 @@
 			(type default)
 		)
 		(uuid "0e7adb41-8a79-42a6-8f0a-04bc06a05484")
+	)
+	(wire
+		(pts
+			(xy 74.295 82.55) (xy 74.295 84.455)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "113e8c18-4d43-4e76-9cf7-344a0d007c4a")
 	)
 	(wire
 		(pts
@@ -7027,16 +7037,6 @@
 			(type default)
 		)
 		(uuid "70a9aa2c-5f06-434b-bfe3-5e5897b5311b")
-	)
-	(wire
-		(pts
-			(xy 74.295 82.55) (xy 74.295 84.455)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "754a4531-8c5d-45c8-ab40-fb3cd8952e6d")
 	)
 	(wire
 		(pts
@@ -8103,6 +8103,28 @@
 			)
 		)
 	)
+	(global_label "RESET"
+		(shape input)
+		(at 74.295 84.455 270)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "17267c2b-179b-439e-9dfd-2f2b3220285d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 74.295 92.5311 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "D-"
 		(shape bidirectional)
 		(at 147.955 24.765 180)
@@ -8543,28 +8565,6 @@
 			)
 		)
 	)
-	(global_label "RST"
-		(shape input)
-		(at 74.295 84.455 270)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "602d6d4f-c60b-4349-b239-4e9897347e4e")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 74.295 90.2331 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-				(hide yes)
-			)
-		)
-	)
 	(global_label "SDDAT3"
 		(shape bidirectional)
 		(at 43.815 33.655 180)
@@ -8652,7 +8652,7 @@
 			)
 		)
 	)
-	(global_label "RST"
+	(global_label "RESET"
 		(shape output)
 		(at 267.97 48.26 0)
 		(fields_autoplaced yes)
@@ -8664,7 +8664,7 @@
 		)
 		(uuid "7694a043-c205-4ff2-8996-f01cc6e520d3")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 273.7413 48.1806 0)
+			(at 276.0461 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12178,77 +12178,6 @@
 			(project "Faikin"
 				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
 					(reference "C9")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Switch:SW_Push_SPDT")
-		(at 153.67 173.99 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "52513901-e7f4-4486-b2f0-886ce7820899")
-		(property "Reference" "SW2"
-			(at 153.67 166.1625 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "SW_Push_SPDT"
-			(at 153.67 168.5868 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 153.67 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 153.67 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Momentary Switch, single pole double throw"
-			(at 153.67 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "053a1450-f081-42ca-bc89-1c1503d997a7")
-		)
-		(pin "2"
-			(uuid "b23bf7b1-d317-4e8a-b380-fd905f36170b")
-		)
-		(pin "3"
-			(uuid "16588805-543e-4bad-b394-1c8293e541f2")
-		)
-		(instances
-			(project ""
-				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
-					(reference "SW2")
 					(unit 1)
 				)
 			)
@@ -16103,7 +16032,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "RevK:SMD1615"
+		(property "Footprint" "RevK:SMD1615-Side"
 			(at 118.11 108.585 0)
 			(effects
 				(font
