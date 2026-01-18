@@ -1,6 +1,6 @@
 // Generated case design for Flasher2/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-18 12:34:42
+// Generated 2026-01-18 13:09:47
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -13,7 +13,7 @@ lipa=0;
 lipt=2;
 casewall=3.000000;
 casebottom=3.000000;
-casetop=10.000000;
+casetop=12.000000;
 bottomthickness=0.000000;
 topthickness=0.000000;
 fit=0.000000;
@@ -75,10 +75,10 @@ module part_D14(part=true,hole=false,block=false)
 {
 translate([-9.000000,10.765000,1.600000])rotate([0,0,90.000000])m4(part,hole,block,casetop); // D14
 };
-module U5(){translate([0.500000,10.665000,1.600000])rotate([0,0,180.000000])children();}
+module U5(){translate([1.085000,11.102050,1.600000])rotate([0,0,180.000000])children();}
 module part_U5(part=true,hole=false,block=false)
 {
-translate([0.500000,10.665000,1.600000])rotate([0,0,180.000000])m5(part,hole,block,casetop); // U5
+translate([1.085000,11.102050,1.600000])rotate([0,0,180.000000])m5(part,hole,block,casetop); // U5
 };
 module R11(){translate([0.100000,-6.000000,1.600000])rotate([0,0,-90.000000])children();}
 module part_R11(part=true,hole=false,block=false)
@@ -328,15 +328,15 @@ module part_C12(part=true,hole=false,block=false)
 {
 translate([3.400000,-5.000000,1.600000])rotate([0,0,-90.000000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
 };
-module C2(){translate([3.500000,17.500000,1.600000])children();}
+module C2(){translate([27.500000,19.500000,1.600000])children();}
 module part_C2(part=true,hole=false,block=false)
 {
-translate([3.500000,17.500000,1.600000])m14(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
+translate([27.500000,19.500000,1.600000])m14(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
 };
-module C9(){translate([2.000000,7.850000,1.600000])children();}
+module C9(){translate([0.450000,7.300000,1.600000])rotate([0,0,-90.000000])children();}
 module part_C9(part=true,hole=false,block=false)
 {
-translate([2.000000,7.850000,1.600000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
+translate([0.450000,7.300000,1.600000])rotate([0,0,-90.000000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
 };
 module U4(){translate([-2.500000,10.700000,1.600000])rotate([0,0,90.000000])children();}
 module part_U4(part=true,hole=false,block=false)
@@ -741,6 +741,7 @@ module m18(part=false,hole=false,block=false,height)
 if(part)
 {
  translate([12.2-0.1-6,1.15-5.1/2,3.3])cube([9.9+0.1,2.8,2.8]);
+ translate([12.2-0.1-6,0,4.7])rotate([0,90,0])cylinder(d=5.1,h=5.8+0.1);
  translate([-6,-5.1/2,0])cube([12.6,5.1,8.3]);
  translate([-2.5,0,-3.6])cylinder(d=0.5,h=3.6+0.1);
  translate([0,0,-3.6])cylinder(d=0.5,h=3.6+0.1);
