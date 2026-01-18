@@ -1,6 +1,6 @@
 // Generated case design for Flasher2/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-18 12:25:50
+// Generated 2026-01-18 12:34:42
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
