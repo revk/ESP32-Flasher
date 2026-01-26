@@ -8940,28 +8940,6 @@
 	)
 	(global_label "VBUS"
 		(shape input)
-		(at 30.48 112.395 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "afe667d4-136b-489f-a031-63e3b9d38c1f")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 23.2504 112.395 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-				(hide yes)
-			)
-		)
-	)
-	(global_label "VBUS"
-		(shape input)
 		(at 167.005 139.7 90)
 		(fields_autoplaced yes)
 		(effects
@@ -12855,6 +12833,72 @@
 			(project "Flasher"
 				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
 					(reference "C17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 30.48 112.395 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5fc17e3a-0e22-4503-8c84-300ffe91594e")
+		(property "Reference" "#PWR032"
+			(at 34.29 112.395 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 26.416 112.268 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 30.48 112.395 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 30.48 112.395 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 30.48 112.395 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "279c2be7-ee08-4178-9f63-76e052086c13")
+		)
+		(instances
+			(project "Flasher"
+				(path "/46c350bb-7de4-4e81-aafd-4af55e37aab0"
+					(reference "#PWR032")
 					(unit 1)
 				)
 			)
