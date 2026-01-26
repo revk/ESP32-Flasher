@@ -87,6 +87,10 @@ If the flasher is on-line it will check for s/w update, and upgrade, and also ch
 1. When no target device, cycles to select manifest to use for next flash. Note this only cycles for manifests that are present on SD card, so no action if only one manifest.
 2. When target device connected (pass or fail or even flashing), starts a full flash erase and program cycle. Note, can be disabled by manifest.
 
+## Display
+
+Some versions have a 320x240 LCD display
+
 ## SD card file format
 
 The card contains files to flash, and manifest files.
@@ -106,6 +110,7 @@ The manifest files are called `manifestN.json` where `N` is the manifest `0` to 
 |`"wait"`|Wait for ATE test result (seconds)|
 |`"flash"`|An array of files to flash - see below|
 |`"url"`|The URL for this manifest file|
+|`"image"`|The URL of a 320x240 PNG image|
 |`"id"`|The first part expected for `START:` sent from target (can use `"app"` in one file to set this)|
 |`"version"`|The second part expected for `START:` sent from target (normally use `"app"` in one file to set this)|
 |`"build"`|The third part expected for `START:` sent from target (normally use `"app"` in one file to set this)|

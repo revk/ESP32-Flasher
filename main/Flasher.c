@@ -65,7 +65,8 @@ uint32_t manifestsize = 0;      // Total flash bytes
 char *mname[MANIFESTS];         // Manifest name (malloc)
 char *murl[MANIFESTS] = { 0 };  // Manifest url (malloc)
 
-char *mpng = NULL;
+uint8_t *mpng = NULL;           // Loaded image
+size_t lpng = 0;
 
 SemaphoreHandle_t epd_mutex = NULL;
 
@@ -108,6 +109,26 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
 }
 
 #ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
+// Image plot
+static void *
+my_alloc (void *opaque, uInt items, uInt size)
+{
+   return mallocspi (items * size);
+}
+
+static void
+my_free (void *opaque, void *address)
+{
+   free (address);
+}
+
+static const char *
+pixel (void *opaque, uint32_t x, uint32_t y, uint16_t r, uint16_t g, uint16_t b, uint16_t a)
+{
+   gfx_pixel_argb (x, y, ((a >> 8) << 24) | ((r >> 8) << 16) | ((g >> 8) << 8) | (b >> 8));
+   return NULL;
+}
+
 void
 lcd_task (void *arg)
 {                               // GFX
@@ -129,9 +150,18 @@ lcd_task (void *arg)
          gfx_clear (0);
          gfx_pos (gfx_width () / 2, 0, GFX_T | GFX_C | GFX_V);
 
-         // TODO image if init state
+         if ((!ledstage || !*ledstage) && lpng)
+         {                      // Image
+            lwpng_decode_t *p = lwpng_decode (NULL, NULL, &pixel, &my_alloc, &my_free, NULL);
+            lwpng_data (p, lpng, mpng);
+            const char *e = lwpng_decoded (&p);
+            if (e)
+               ESP_LOGE (TAG, "PNG fail %s", e);
+         }
 
-         if (mname[manifest] && *mname[manifest])
+         if (b.die)
+            gfx_text (0, 5, "Flasher");
+         else if (mname[manifest] && *mname[manifest])
          {
             int s = 5;
             while (s > 1)
@@ -730,7 +760,7 @@ scan_manifest (manifest_t cb)
          struct stat s = { 0 };
          if (stat (fn, &s))
             s.st_size = 0;
-         cb (fn, url, -1, 0, s.st_size, 0);
+         cb (fn, url, -2, 0, s.st_size, 0);
          free (fn);
       }
       free (filename);
@@ -900,12 +930,14 @@ upgrade_check (const char *fn, char *url)
 void
 load_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
+   if (app < -1)
+      return;                   // Not even app, e.g. image
    if (!size)
       manifestsize = -1;
    else if (manifestsize != -1)
       manifestsize += size;
    if (app < 0)
-      return;
+      return;                   // Not app check
    int f = open (fn, O_RDONLY);
    if (f < 0)
       return;
@@ -1005,16 +1037,50 @@ load_manifest (void)
    mname[manifest] = NULL;
    free (murl[manifest]);
    murl[manifest] = NULL;
+   free (mpng);
+   mpng = NULL;
+   lpng = 0;
    j = read_manifest (manifest);
    if (!j)
    {
       xSemaphoreGive (epd_mutex);
       return "Cannot load manifest";
    }
-   if (jo_find (j, "name"))
+   if (jo_find (j, "name") == JO_STRING)
       mname[manifest] = jo_strdup (j);
-   if (jo_find (j, "url"))
+   if (jo_find (j, "url") == JO_STRING)
       murl[manifest] = jo_strdup (j);
+   if (jo_find (j, "image") == JO_STRING)
+   {
+      char *url = jo_strdup (j);
+      char *filename = makefn (url);
+      char *fn = NULL;
+      if (asprintf (&fn, "%s/%s", sd_dir, filename) >= 0)
+      {
+         struct stat s = { 0 };
+         if (!stat (fn, &s))
+         {
+            mpng = malloc (s.st_size);
+            if (mpng)
+            {
+               int f = open (fn, O_RDONLY);
+               if (read (f, mpng, s.st_size) != s.st_size)
+               {
+                  free (mpng);
+                  mpng = NULL;
+               } else
+               {
+                  lpng = s.st_size;
+                  ESP_LOGE (TAG, "Image %s", url);
+               }
+               close (f);
+            }
+         }
+         free (fn);
+      }
+      free (filename);
+      free (url);
+   }
    b.manifestappprefix = 0;
 #define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
 #define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
@@ -1108,7 +1174,7 @@ esp_loader_error_t flashe = 0;
 void
 flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify)
 {
-   if (!fn || flashe || !size)
+   if (!fn || flashe || !size || app < -1)
       return;
    char *filename = fn + sizeof (sd_dir);
    int try = (verify ? : 1);
