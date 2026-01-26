@@ -24,3 +24,16 @@ bit	flash.check	true .live	// Default for "check" if not in manifest
 bit	flash.erase	false .live	// Default for (always) "erase" if not in manifest
 u8	flash.verify	1 .live	// Default for "verify" if not in manifest
 u8	flash.wait	10 .unit="s"	// Default for (ATE) "wait" if not in manifest
+
+#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
+gpio	gfx.pwr						// Display power
+gpio	gfx.ena						// Display ENA
+gpio	gfx.din		37				// Display DIN
+gpio	gfx.sck		38				// Display SCK
+gpio	gfx.cs		39				// Display CS
+gpio	gfx.dc		40				// Display DC
+gpio	gfx.rst		41				// Display RST
+gpio	gfx.bl		42				// Display Backlight
+gpio	gfx.busy					// Display BUSY
+u8	gfx.flip	6				// Display Flip
+#endif

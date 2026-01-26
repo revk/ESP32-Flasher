@@ -24,6 +24,7 @@ static const char TAG[] = "Flasher";
 #include "esp32_usb_cdc_acm_port.h"
 #include <math.h>
 #include <mbedtls/sha1.h>
+#include "gfx.h"
 
 static httpd_handle_t webserver = NULL;
 
@@ -1421,4 +1422,18 @@ app_main ()
    revk_gpio_input (btn);
    revk_task ("btn", btn_task, NULL, 4);
    revk_task ("flash", flash_task, NULL, 16);
+#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
+   {                            // GFX
+    const char *e = gfx_init (pwr: gfxpwr.num, ena: gfxena.num, cs: gfxcs.num, sck: gfxsck.num, mosi: gfxdin.num, dc: gfxdc.num, rst: gfxrst.num, busy: gfxbusy.num, flip: gfxflip) ;
+      if (e)
+      {
+         ESP_LOGE (TAG, "gfx %s", e);
+         jo_t j = jo_object_alloc ();
+         jo_string (j, "error", "Failed to start");
+         jo_string (j, "description", e);
+         revk_error ("gfx", &j);
+      }
+      revk_gfx_init (3);
+   }
+#endif
 }
