@@ -686,6 +686,29 @@ close_manifest (void)
    jo_free (&j);
 }
 
+char *
+makefn (char *url)
+{                               // Use hash
+   char *filename = NULL;
+   const char *leaf = strrchr (url, '/');
+   if (leaf && strlen (leaf) > 200)
+      leaf = strrchr (url, '.');
+   else if (leaf)
+      leaf++;
+   if (!leaf || strlen (leaf) > 200)
+      leaf = "";
+   unsigned char output[20];
+   mbedtls_sha1 ((const uint8_t *) url, strlen (url), output);
+   if ((filename = malloc (40 + 1 + strlen (leaf) + 1)))
+   {
+      for (int i = 0; i < 20; i++)
+         sprintf (filename + i * 2, "%02X", output[i]);
+      filename[40] = '-';
+      strcpy (filename + 41, leaf);
+   }
+   return filename;
+}
+
 typedef void manifest_t (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t verify);
 
 void
@@ -697,6 +720,22 @@ scan_manifest (manifest_t cb)
       return;
    }
    jo_rewind (j);
+   if (jo_find (j, "image") == JO_STRING)
+   {
+      char *url = jo_strdup (j);
+      char *filename = makefn (url);
+      char *fn = NULL;
+      if (asprintf (&fn, "%s/%s", sd_dir, filename) >= 0)
+      {
+         struct stat s = { 0 };
+         if (stat (fn, &s))
+            s.st_size = 0;
+         cb (fn, url, -1, 0, s.st_size, 0);
+         free (fn);
+      }
+      free (filename);
+      free (url);
+   }
    if (jo_find (j, "flash") == JO_ARRAY)
    {
       while (jo_next (j) == JO_OBJECT)
@@ -747,24 +786,7 @@ scan_manifest (manifest_t cb)
                jo_next (j);
          }
          if (!filename && url)
-         {                      // Use hash
-            const char *leaf = strrchr (url, '/');
-            if (leaf && strlen (leaf) > 200)
-               leaf = strrchr (url, '.');
-            else if (leaf)
-               leaf++;
-            if (!leaf || strlen (leaf) > 200)
-               leaf = "";
-            unsigned char output[20];
-            mbedtls_sha1 ((const uint8_t *) url, strlen (url), output);
-            if ((filename = malloc (40 + 1 + strlen (leaf) + 1)))
-            {
-               for (int i = 0; i < 20; i++)
-                  sprintf (filename + i * 2, "%02X", output[i]);
-               filename[40] = '-';
-               strcpy (filename + 41, leaf);
-            }
-         }
+            filename = makefn (url);
          if (filename)
          {
             char *fn = NULL;
