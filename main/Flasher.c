@@ -24,7 +24,10 @@ static const char TAG[] = "Flasher";
 #include "esp32_usb_cdc_acm_port.h"
 #include <math.h>
 #include <mbedtls/sha1.h>
+#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
 #include "gfx.h"
+#include <lwpng.h>
+#endif
 
 static httpd_handle_t webserver = NULL;
 
@@ -49,6 +52,7 @@ uint8_t progress = 0;           // Progress (LED)
 char ledf = 'K',
    ledt = 'K',
    ledsd = 'B';                 // LED from/to and SD
+const char *ledstage = NULL;    // LED/LCD state
 uint8_t mac[6] = { 0 };         // Found mac
 char chip[30] = { 0 };          // Found chip type
 
@@ -58,7 +62,10 @@ uint32_t flashsize = 0;         // Found flash size
 
 uint32_t manifestsize = 0;      // Total flash bytes
 char *mname[MANIFESTS];         // Manifest name (malloc)
-char *murl[MANIFESTS];          // Manifest url (malloc)
+char *murl[MANIFESTS]={0};          // Manifest url (malloc)
+char *mpng=NULL;
+
+SemaphoreHandle_t epd_mutex = NULL;
 
 jo_t j = NULL;                  // Parsed manifest JSON (yeh, sorry)
 
@@ -97,6 +104,55 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
       b.wifi = 1;
    return NULL;
 }
+
+#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
+void
+lcd_task (void *arg)
+{                               // GFX
+ const char *e = gfx_init (pwr: gfxpwr.num, ena: gfxena.num, cs: gfxcs.num, sck: gfxsck.num, mosi: gfxdin.num, dc: gfxdc.num, rst: gfxrst.num, busy: gfxbusy.num, flip: gfxflip, direct:1);
+   if (e)
+   {
+      ESP_LOGE (TAG, "gfx %s", e);
+      jo_t j = jo_object_alloc ();
+      jo_string (j, "error", "Failed to start");
+      jo_string (j, "description", e);
+      revk_error ("gfx", &j);
+   } else
+   {
+      revk_gfx_init (3);
+      while (1)
+      {
+         xSemaphoreTake (epd_mutex, portMAX_DELAY);
+         gfx_lock ();
+         gfx_clear (0);
+         gfx_pos (gfx_width () / 2, 0, GFX_T | GFX_C | GFX_V);
+
+         // TODO image if init state
+
+         if (mname[manifest] && *mname[manifest])
+            gfx_text (GFX_TEXT_DESCENDERS, 5, mname[manifest]);
+         else
+            gfx_text (0, 5, "Manifest %d", manifest);
+
+         gfx_foreground (revk_rgb (ledt));
+         if (ledstage)
+            gfx_text (0, 5, ledstage);
+
+         if (ledf != ledt)
+         {                      // Progress
+            // TODO
+            gfx_text (0, 2, "%d%%", progress);
+         }
+
+         gfx_refresh ();
+         gfx_unlock ();
+         xSemaphoreGive (epd_mutex);
+         usleep (100000);
+      }
+   }
+   vTaskDelete (NULL);
+}
+#endif
 
 void
 led_task (void *arg)
@@ -142,8 +198,9 @@ led_task (void *arg)
 }
 
 void
-set_led (uint8_t p, char f, char t)
+set_led (uint8_t p, char f, char t, const char *tage)
 {                               // Set LED display state (if f==t then one LED at progress point)
+   ledstage = tage;
    progress = p;
    if (f)
       ledf = f;
@@ -735,7 +792,7 @@ upgrade_check (const char *fn, char *url)
       int len = 0;
       if (status / 100 == 2)
       {
-         set_led (100, 'K', 'Y');
+         set_led (100, 'K', 'Y', "File update");
          b.fileerror = 1;
          int o = open (dl, O_CREAT | O_TRUNC | O_WRONLY, 0777);
          if (o < 0)
@@ -881,6 +938,7 @@ read_manifest (uint8_t m)
 const char *
 load_manifest (void)
 {
+   xSemaphoreTake (epd_mutex, portMAX_DELAY);
    close_manifest ();
    free (mname[manifest]);
    mname[manifest] = NULL;
@@ -888,7 +946,10 @@ load_manifest (void)
    murl[manifest] = NULL;
    j = read_manifest (manifest);
    if (!j)
+   {
+      xSemaphoreGive (epd_mutex);
       return "Cannot load manifest";
+   }
    if (jo_find (j, "name"))
       mname[manifest] = jo_strdup (j);
    if (jo_find (j, "url"))
@@ -956,6 +1017,7 @@ load_manifest (void)
       manifestsize = 0;
       scan_manifest (load_cb);
    }
+   xSemaphoreGive (epd_mutex);
    if (manifestsize == -1)
       return "Missing files";
    if (!manifestsize)
@@ -971,7 +1033,7 @@ do_erase (void)
    uint32_t p = 0;
    while (p < flashsize && !b.reload)
    {
-      set_led (p * 100 / flashsize, 'B', 'K');
+      set_led (p * 100 / flashsize, 'B', 'K', "Erase");
       esp_loader_error_t e = esp_loader_flash_erase_region (p, BLOCK);
       if (e)
          return e;
@@ -1004,7 +1066,7 @@ flash_cb (char *fn, char *url, int app, uint32_t address, uint32_t size, uint8_t
       {
          while (p < size)
          {
-            set_led (flashcount * 100 / manifestsize, 'K', 'B');
+            set_led (flashcount * 100 / manifestsize, 'K', 'B', "Flash");
             uint32_t s = read (f, block, BLOCK);
             if (s <= 0)
                break;
@@ -1132,7 +1194,7 @@ flash_task (void *arg)
       ESP_LOGI (TAG, "Mounted SD");
       ledsd = 'G';
       b.fileerror = 0;
-      set_led (manifest * 10, 'Y', 'Y');
+      set_led (manifest * 10, 'Y', 'Y', "Wait");
       {                         // Check manifests
          manifests = 0;
          for (int i = 0; i < MANIFESTS; i++)
@@ -1156,7 +1218,7 @@ flash_task (void *arg)
          if (e)
          {
             ESP_LOGE (TAG, "Manifest fail: %s", e);
-            set_led (manifest * 10, 'R', 'R');
+            set_led (manifest * 10, 'R', 'R', "FAIL");
             b.fileerror = 1;
          }
       }
@@ -1171,9 +1233,9 @@ flash_task (void *arg)
          {
             b.fileerror = 0;
             if (badusb && badusb + 2 > uptime ())
-               set_led (manifest * 10, 'R', 'R');       // Likely diff device
+               set_led (manifest * 10, 'R', 'R', "FAIL");       // Likely duff device
             else
-               set_led (manifest * 10, 'M', 'M');
+               set_led (manifest * 10, 'M', 'M', NULL);
             if (b.wifi && time (0) > 1000000000)
             {
                ESP_LOGE (TAG, "Online");
@@ -1207,7 +1269,7 @@ flash_task (void *arg)
                ESP_LOGE (TAG, "JTAG connect");
             if (!e)
             {                   // Connected
-               set_led (manifest * 10, 'O', 'O');
+               set_led (manifest * 10, 'O', 'O', "Check");
                uint8_t status = STATUS_TIMEOUT;
                if (!b.forceerase && !b.erase && !b.nocheck)
                {
@@ -1260,32 +1322,32 @@ flash_task (void *arg)
                switch (status)
                {
                case STATUS_MISMATCH:
-                  set_led (manifest * 10, 'Y', 'Y');
+                  set_led (manifest * 10, 'Y', 'Y', "Mismatch");
                   break;
                case STATUS_PASS:
-                  set_led (100, 'K', 'G');
+                  set_led (100, 'K', 'G', "PASS");
                   break;
                case STATUS_FAIL:
-                  set_led (100, 'K', 'R');
+                  set_led (100, 'K', 'R', "FAIL");
                   break;
                case STATUS_LOOPING:
-                  set_led (90, 'K', 'R');
+                  set_led (90, 'K', 'R', "FAIL LOOP");
                   break;
                case STATUS_SILENT:
-                  set_led (80, 'K', 'R');
+                  set_led (80, 'K', 'R', "FAIL SILENT");
                   break;
                case STATUS_EMPTY:
-                  set_led (70, 'K', 'R');
+                  set_led (70, 'K', 'R', "FAIL EMPTY");
                   break;
                case STATUS_ERROR:
                   b.fileerror = 1;
-                  set_led (60, 'K', 'R');
+                  set_led (60, 'K', 'R', "FAIL ERROR");
                   break;
                case STATUS_TIMEOUT:
-                  set_led (50, 'R', 'G');
+                  set_led (50, 'R', 'G', "TIMEOUT");
                   break;
                default:
-                  set_led (manifest * 10, 'R', 'R');
+                  set_led (manifest * 10, 'R', 'R', "FAIL?");
                }
                if (!b.forceerase && b.connected && !b.reload)
                {
@@ -1297,7 +1359,7 @@ flash_task (void *arg)
             //close_manifest ();
             loader_port_esp32_usb_cdc_acm_deinit ();
          }
-         set_led (0, 'K', 'K');
+         set_led (0, 'K', 'K', "OFF");
          ESP_LOGE (TAG, "Power off");
          if (b.connected)
             usb_host_lib_set_root_port_power (false);
@@ -1317,7 +1379,7 @@ flash_task (void *arg)
    {
       int p = revk_ota_progress ();
       if (p >= 0 && p <= 100)
-         set_led (p, 'K', 'Y');
+         set_led (p, 'K', 'Y', "OTA");
       usleep (100000);
    }
    vTaskDelete (NULL);
@@ -1403,6 +1465,8 @@ app_main ()
 {
    revk_boot (&mqtt_client_callback);
    revk_start ();
+   epd_mutex = xSemaphoreCreateMutex ();
+   xSemaphoreGive (epd_mutex);
    memset (mname, 0, sizeof (mname));
    memset (murl, 0, sizeof (murl));
    // Web interface
@@ -1419,21 +1483,10 @@ app_main ()
    revk_gpio_output (pwr3, 0);
    revk_gpio_output (pwr5, 0);
    revk_task ("led", led_task, NULL, 4);
+#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
+   revk_task ("lcd", lcd_task, NULL, 4);
+#endif
    revk_gpio_input (btn);
    revk_task ("btn", btn_task, NULL, 4);
    revk_task ("flash", flash_task, NULL, 16);
-#ifndef CONFIG_GFX_BUILD_SUFFIX_GFXNONE
-   {                            // GFX
-    const char *e = gfx_init (pwr: gfxpwr.num, ena: gfxena.num, cs: gfxcs.num, sck: gfxsck.num, mosi: gfxdin.num, dc: gfxdc.num, rst: gfxrst.num, busy: gfxbusy.num, flip: gfxflip) ;
-      if (e)
-      {
-         ESP_LOGE (TAG, "gfx %s", e);
-         jo_t j = jo_object_alloc ();
-         jo_string (j, "error", "Failed to start");
-         jo_string (j, "description", e);
-         revk_error ("gfx", &j);
-      }
-      revk_gfx_init (3);
-   }
-#endif
 }
