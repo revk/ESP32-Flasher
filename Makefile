@@ -44,10 +44,14 @@ components/ESP32-RevK/revk_settings: components/ESP32-RevK/revk_settings.c
 components/ESP32-RevK/idfmon: components/ESP32-RevK/idfmon.c
 	make -C components/ESP32-RevK idfmon
 
-set:    main/settings.h s3
+set:    main/settings.h s3 lcd2
 
 s3:
-	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2
+	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2-GFXNONE
+	@make
+
+lcd2:
+	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2-LCD2
 	@make
 
 flash:
