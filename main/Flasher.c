@@ -53,6 +53,7 @@ char ledf = 'K',
    ledt = 'K',
    ledsd = 'B';                 // LED from/to and SD
 const char *ledstage = NULL;    // LED/LCD state
+char *atefail = NULL;           // ATE fail string
 uint8_t mac[6] = { 0 };         // Found mac
 char chip[30] = { 0 };          // Found chip type
 
@@ -62,8 +63,9 @@ uint32_t flashsize = 0;         // Found flash size
 
 uint32_t manifestsize = 0;      // Total flash bytes
 char *mname[MANIFESTS];         // Manifest name (malloc)
-char *murl[MANIFESTS]={0};          // Manifest url (malloc)
-char *mpng=NULL;
+char *murl[MANIFESTS] = { 0 };  // Manifest url (malloc)
+
+char *mpng = NULL;
 
 SemaphoreHandle_t epd_mutex = NULL;
 
@@ -130,20 +132,44 @@ lcd_task (void *arg)
          // TODO image if init state
 
          if (mname[manifest] && *mname[manifest])
-            gfx_text (GFX_TEXT_DESCENDERS, 5, mname[manifest]);
-         else
+         {
+            int s = 5;
+            while (s > 1)
+            {
+               gfx_pos_t h = 0,
+                  w = 0;
+               gfx_text_size (GFX_TEXT_DESCENDERS, s, mname[manifest], &w, &h);
+               if (w <= gfx_width ())
+                  break;
+               s--;
+            }
+            gfx_text (GFX_TEXT_DESCENDERS, s, mname[manifest]);
+         } else
             gfx_text (0, 5, "Manifest %d", manifest);
 
-         gfx_foreground (revk_rgb (ledt));
+         gfx_foreground (gfx_rgb (ledt == 'K' ? ledf == 'K' ? 'W' : ledf : ledt));
+         gfx_pos (gfx_width () / 2, gfx_height () / 3, GFX_C | GFX_M | GFX_V);
          if (ledstage)
             gfx_text (0, 5, ledstage);
 
+         gfx_pos (gfx_width () / 2, gfx_height () * 2 / 3, GFX_C | GFX_M);
+         if (atefail)
+            gfx_text (GFX_TEXT_DESCENDERS, 3, "%s", atefail);
+         else if (ledt != ledf)
+            gfx_text (GFX_TEXT_DESCENDERS, 3, "%d%%", progress);
+
          if (ledf != ledt)
          {                      // Progress
-            // TODO
-            gfx_text (0, 2, "%d%%", progress);
+            int h = gfx_height () / 6;
+            gfx_pos (0, gfx_height () - h, 0);
+            gfx_box (gfx_width (), h, 255);
+            gfx_foreground (gfx_rgb (ledf));
+            gfx_pos (1, gfx_height () - (h - 1), 0);
+            gfx_fill (gfx_width () - 2, (h - 2), 255);
+            gfx_foreground (gfx_rgb (ledt));
+            gfx_pos (1, gfx_height () - (h - 1), 0);
+            gfx_fill ((gfx_width () - 2) * progress / 100, (h - 2), 255);
          }
-
          gfx_refresh ();
          gfx_unlock ();
          xSemaphoreGive (epd_mutex);
@@ -376,6 +402,10 @@ enum
    uint32_t p = 0;
    jo_t j = NULL;
    uint8_t status = STATUS_TIMEOUT;
+   xSemaphoreTake (epd_mutex, portMAX_DELAY);
+   free (atefail);
+   atefail = NULL;
+   xSemaphoreGive (epd_mutex);
    while (uptime () <= to && status == STATUS_TIMEOUT && !b.forceerase)
    {
       uint8_t c;
@@ -526,7 +556,16 @@ enum
                if (t == JO_TRUE)
                   ate = 1;
                else if (t == JO_FALSE)
+               {
                   ate = -1;
+                  if ((t = jo_find (j, "reason")) == JO_STRING)
+                  {
+                     xSemaphoreTake (epd_mutex, portMAX_DELAY);
+                     free (atefail);
+                     atefail = jo_strdup (j);
+                     xSemaphoreGive (epd_mutex);
+                  }
+               }
             } else if ((t = jo_find (j, "app")))
             {
                if (rst++ > 5)
@@ -1358,8 +1397,12 @@ flash_task (void *arg)
             }
             //close_manifest ();
             loader_port_esp32_usb_cdc_acm_deinit ();
+            xSemaphoreTake (epd_mutex, portMAX_DELAY);
+            free (atefail);
+            atefail = NULL;
+            xSemaphoreGive (epd_mutex);
          }
-         set_led (0, 'K', 'K', "OFF");
+         set_led (0, 'K', 'K', "Next");
          ESP_LOGE (TAG, "Power off");
          if (b.connected)
             usb_host_lib_set_root_port_power (false);
@@ -1373,13 +1416,15 @@ flash_task (void *arg)
       b.reload = 0;
    }
 
+   set_led (0, 'K', 'K', NULL);
+
    usb_host_uninstall ();
    b.fileerror = 0;
    while (revk_shutting_down (NULL))
    {
       int p = revk_ota_progress ();
       if (p >= 0 && p <= 100)
-         set_led (p, 'K', 'Y', "OTA");
+         set_led (p, 'K', 'Y', "Upgrade");
       usleep (100000);
    }
    vTaskDelete (NULL);
