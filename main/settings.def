@@ -10,7 +10,7 @@ gpio	sd.cd	-8	// CD
 
 gpio	pwr.3	9	// 3.3V power
 gpio	pwr.5	10	// 5V power
-gpio	led	11	// LED
+gpio	led	"11 13" .array=2	// LED (out/in)
 u8	leds	10 .fix	// How many LEDs
 
 gpio	loop	1	// Loop

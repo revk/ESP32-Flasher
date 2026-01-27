@@ -54,6 +54,7 @@ char ledf = 'K',
    ledsd = 'B';                 // LED from/to and SD
 const char *ledstage = NULL;    // LED/LCD state
 char *atefail = NULL;           // ATE fail string
+const char *lederror = NULL;    // LED fail
 uint8_t mac[6] = { 0 };         // Found mac
 char chip[30] = { 0 };          // Found chip type
 
@@ -143,12 +144,13 @@ lcd_task (void *arg)
    } else
    {
       revk_gfx_init (3);
+      uint8_t tick = 0;
       while (1)
       {
+         tick++;
          xSemaphoreTake (epd_mutex, portMAX_DELAY);
          gfx_lock ();
          gfx_clear (0);
-         gfx_pos (gfx_width () / 2, 0, GFX_T | GFX_C | GFX_V);
 
          if ((!ledstage || !*ledstage) && lpng)
          {                      // Image
@@ -158,6 +160,10 @@ lcd_task (void *arg)
             if (e)
                ESP_LOGE (TAG, "PNG fail %s", e);
          }
+
+         gfx_pos (gfx_width () / 2, 0, GFX_T | GFX_C);
+         gfx_background (gfx_rgb ('W'));
+         gfx_foreground (gfx_rgb ('W'));
 
          if (b.die)
             gfx_text (0, 5, "Flasher");
@@ -178,6 +184,7 @@ lcd_task (void *arg)
             gfx_text (0, 5, "Manifest %d", manifest);
 
          gfx_foreground (gfx_rgb (ledt == 'K' ? ledf == 'K' ? 'W' : ledf : ledt));
+         gfx_background (gfx_rgb ('K'));
          gfx_pos (gfx_width () / 2, gfx_height () / 3, GFX_C | GFX_M | GFX_V);
          if (ledstage)
             gfx_text (0, 5, ledstage);
@@ -185,8 +192,10 @@ lcd_task (void *arg)
          gfx_pos (gfx_width () / 2, gfx_height () * 2 / 3, GFX_C | GFX_M);
          if (atefail)
             gfx_text (GFX_TEXT_DESCENDERS, 3, "%s", atefail);
-         else if (ledt != ledf)
+         else if (ledt != ledf && !b.fileerror)
             gfx_text (GFX_TEXT_DESCENDERS, 3, "%d%%", progress);
+         else if (lederror)
+            gfx_text (GFX_TEXT_DESCENDERS, 3, "%s", lederror);
 
          if (ledf != ledt)
          {                      // Progress
@@ -196,10 +205,14 @@ lcd_task (void *arg)
             gfx_foreground (gfx_rgb (ledf));
             gfx_pos (1, gfx_height () - (h - 1), 0);
             gfx_fill (gfx_width () - 2, (h - 2), 255);
-            gfx_foreground (gfx_rgb (ledt));
-            gfx_pos (1, gfx_height () - (h - 1), 0);
-            gfx_fill ((gfx_width () - 2) * progress / 100, (h - 2), 255);
+            if (!(b.fileerror && (tick & 1)))
+            {
+               gfx_foreground (gfx_rgb (ledt));
+               gfx_pos (1, gfx_height () - (h - 1), 0);
+               gfx_fill ((gfx_width () - 2) * progress / 100, (h - 2), 255);
+            }
          }
+
          gfx_refresh ();
          gfx_unlock ();
          xSemaphoreGive (epd_mutex);
@@ -214,7 +227,7 @@ void
 led_task (void *arg)
 {
    led_strip_t strip = NULL;
-   led_strip (&strip, led, MANIFESTS + 1, 3, LED_GRB);
+   led_strip (&strip, led[0], led[1], MANIFESTS + 1, 3, LED_GRB);
    if (strip)
    {
       uint8_t tick = 0;
@@ -244,7 +257,7 @@ led_task (void *arg)
             revk_led (strip, MANIFESTS, 255, revk_rgb ('R'));
          else
             revk_led (strip, MANIFESTS, 255, revk_rgb (ledsd));
-         led_send ();
+         lederror = led_send ();
          usleep (100000);
       }
       led_clear (strip);
@@ -632,6 +645,8 @@ enum
                      }
                      if (match >= 0)
                         do_start ();
+                     else
+                        ok = 1;
                   }
                }
             } else if ((t = jo_find (j, "ok")))
@@ -883,7 +898,7 @@ upgrade_check (const char *fn, char *url)
       int len = 0;
       if (status / 100 == 2)
       {
-         set_led (100, 'K', 'Y', "File update");
+         set_led (100, 'K', 'Y', "Updating");
          b.fileerror = 1;
          int o = open (dl, O_CREAT | O_TRUNC | O_WRONLY, 0777);
          if (o < 0)
@@ -1081,6 +1096,7 @@ load_manifest (void)
       free (filename);
       free (url);
    }
+   xSemaphoreGive (epd_mutex);
    b.manifestappprefix = 0;
 #define x(f) free (manifest##f); manifest##f = NULL; if (jo_find (j, #f)) manifest##f = jo_strdup (j);
 #define xx(f1,f2) free (manifest##f1##f2); manifest##f1##f2 = NULL; if (jo_find (j, #f1"."#f2)) manifest##f1##f2 = jo_strdup (j);
@@ -1144,7 +1160,6 @@ load_manifest (void)
       manifestsize = 0;
       scan_manifest (load_cb);
    }
-   xSemaphoreGive (epd_mutex);
    if (manifestsize == -1)
       return "Missing files";
    if (!manifestsize)
