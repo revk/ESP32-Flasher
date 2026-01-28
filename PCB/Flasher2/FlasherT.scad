@@ -1,6 +1,6 @@
 // Generated case design for Flasher2/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-28 09:04:47
+// Generated 2026-01-28 10:23:07
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -30,7 +30,7 @@ datey=0.000000;
 datet=0.500000;
 dateh=3.000000;
 datea=0;
-date="2026-01-21";
+date="2026-01-28";
 datef="OCRB";
 logox=-22.000000;
 logoy=-18.000000;
@@ -157,10 +157,10 @@ module part_C10(part=true,hole=false,block=false)
 {
 translate([-1.300000,6.775000,1.600000])rotate([0,0,90.000000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
 };
-module J2(){translate([-6.500000,19.000000,1.600000])rotate([0,0,180.000000])children();}
+module J2(){translate([-6.500000,19.500000,1.600000])rotate([0,0,180.000000])children();}
 module part_J2(part=true,hole=false,block=false)
 {
-translate([-6.500000,19.000000,1.600000])rotate([0,0,180.000000])m12(part,hole,block,casetop); // J2
+translate([-6.500000,19.500000,1.600000])rotate([0,0,180.000000])m12(part,hole,block,casetop); // J2
 };
 module R7(){translate([14.500000,-21.000000,1.600000])rotate([0,0,-90.000000])children();}
 module part_R7(part=true,hole=false,block=false)
