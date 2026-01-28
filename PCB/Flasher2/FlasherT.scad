@@ -1,6 +1,6 @@
 // Generated case design for Flasher2/Flasher.kicad_pcb
 // By https://github.com/revk/PCBCase
-// Generated 2026-01-19 09:09:30
+// Generated 2026-01-28 09:01:43
 // title:	Flasher
 // rev:	1
 // company:	Adrian Kennard, Andrews & Arnold Ltd
@@ -30,7 +30,7 @@ datey=0.000000;
 datet=0.500000;
 dateh=3.000000;
 datea=0;
-date="2026-01-19";
+date="2026-01-21";
 datef="OCRB";
 logox=-22.000000;
 logoy=-18.000000;
@@ -335,10 +335,10 @@ module part_C12(part=true,hole=false,block=false)
 {
 translate([3.400000,-5.000000,1.600000])rotate([0,0,-90.000000])m11(part,hole,block,casetop); // RevK:C_0201 C_0201_0603Metric (back)
 };
-module C2(){translate([27.500000,19.500000,1.600000])children();}
+module C2(){translate([8.400000,6.500000,1.600000])children();}
 module part_C2(part=true,hole=false,block=false)
 {
-translate([27.500000,19.500000,1.600000])m14(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
+translate([8.400000,6.500000,1.600000])m14(part,hole,block,casetop); // RevK:C_0402 C_0402_1005Metric (back)
 };
 module C9(){translate([0.450000,7.300000,1.600000])rotate([0,0,-90.000000])children();}
 module part_C9(part=true,hole=false,block=false)
@@ -748,7 +748,7 @@ module m18(part=false,hole=false,block=false,height)
 if(part)
 {
  translate([12.2-0.1-6,1.15-5.1/2,3.3])cube([9.9+0.1,2.8,2.8]);
- translate([12.2-0.1-6,0,4.7])rotate([0,90,0])cylinder(d=5.1,h=5.8+0.1);
+ translate([12.2-0.1-6,-5.1/2,4.7-5.1/2])cube([6,5.1,5.1]);
  translate([-6,-5.1/2,0])cube([12.6,5.1,8.3]);
  translate([-2.5,0,-3.6])cylinder(d=0.5,h=3.6+0.1);
  translate([0,0,-3.6])cylinder(d=0.5,h=3.6+0.1);
