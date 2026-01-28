@@ -8,6 +8,12 @@ The main use case is a factory functional test with feedback of pass/fail via LE
 
 The idea is a factory worker can simply plug the lead in to a target device, see a row of LEDs light one by one, then all go green (or red if failed). This simple operation should be foolproof!
 
+# Flasher2
+
+<img src='PCB/Flasher2/Flasher.png' align=right width=33%>
+
+The Flasher is also available with a 2" LCD display, which makes it even easier to use.
+
 ## Connections
 
 There is a USB-C for power of the flasher and connected board, this would typically be connected to a USB charger (e.g. 2A+). This can also be used for serial debug/flashing of the flasher board itself if needed.
